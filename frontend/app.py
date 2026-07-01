@@ -4,47 +4,130 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 #-------PACKAGE IMPORTS-------
-
 from backend.chatbot import chatbot
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage
 import streamlit as st
+import uuid    # for generating unique thread ids
 
-# thread_id  = "1"
-# config = {'configurable' : {
-#     'thread_id' : thread_id
-# }}
+#=========UTILITY FUNCTIONS=========
+def generate_thread_id():
+    return str(uuid.uuid4())
 
+def add_thread_id_to_session(thread_id):
+    if 'thread_ids' not in st.session_state:
+        st.session_state['thread_ids'] = []
+    if thread_id not in st.session_state['thread_ids']:
+        st.session_state['thread_ids'].append(thread_id)
+
+# Create a completely new chat conversation
+def reset_conversation():
+    # Clear the current chat messages from the UI
+    st.session_state['message_history'] = []
+    # Generate a new string thread id
+    new_id = generate_thread_id()
+    st.session_state['current_thread_id'] = new_id
+    # Add thread to the conversation list in the sidebar
+    add_thread_id_to_session(new_id)
+
+
+#========== STREAMLIT APP INITIALIZATION ==========
 
 st.title("Agentic Chat Bot")
 
-#create session
+# 1. Master list storing all conversation IDs
+if 'thread_ids' not in st.session_state:
+    st.session_state['thread_ids'] = []
+
+# 2. String storing the active conversation ID
+if 'current_thread_id' not in st.session_state:
+    st.session_state['current_thread_id'] = generate_thread_id()
+    add_thread_id_to_session(st.session_state['current_thread_id'])
+
+# 3. List storing the UI message history
 if 'message_history' not in st.session_state:
     st.session_state['message_history'] = []
-#loading the conversation history from the session state
+
+# Pass the single string current_thread_id here, NOT the full list
+CONFIG = {'configurable': {'thread_id': st.session_state['current_thread_id']}}
+
+
+#========== SIDEBAR THREADING ==========
+st.sidebar.title("All Conversations")
+
+# Button to start a new conversation
+if st.sidebar.button("➕ New Conversation", use_container_width=True):
+    reset_conversation()
+    st.rerun()
+
+# Display current active thread ID for clarity
+st.sidebar.caption(f"Active Session: {st.session_state['current_thread_id'][:8]}...")
+
+
+st.sidebar.write("---")
+st.sidebar.subheader("Recent Chats")
+
+# 2. Render all threads. [::-1] reverses the list to show the newest thread first.
+for index, thread_id in enumerate(st.session_state['thread_ids'][::-1]):
+    # Format the button label nicely (e.g., "Chat 1: a1b2c3d4...")
+    display_index = len(st.session_state['thread_ids']) - index
+    button_label = f"💬 Chat {display_index}: {thread_id[:8]}..."
+    
+    # Highlight the currently active thread using type="primary"
+    is_active = thread_id == st.session_state['current_thread_id']
+    button_type = "primary" if is_active else "secondary"
+    
+    # Create a button for each thread
+    if st.sidebar.button(button_label, key=f"thread_{thread_id}", type=button_type, use_container_width=True):
+        # Switch the active thread ID
+        st.session_state['current_thread_id'] = thread_id
+        
+        # 💡 IMPORTANT: Load historical messages from LangGraph's state memory
+        # Fetching state history directly from your LangGraph chatbot instance
+        try:
+            state_history = chatbot.get_state({'configurable': {'thread_id': thread_id}})
+            messages = state_history.values.get("messages", [])
+            
+            # Map LangChain message objects back to Streamlit UI roles
+            st.session_state['message_history'] = [
+                {
+                    "role": "user" if isinstance(msg, HumanMessage) else "assistant", 
+                    "content": msg.content
+                }
+                for msg in messages
+            ]
+        except Exception:
+            # Fallback if the state graph is empty or hasn't started yet
+            st.session_state['message_history'] = []
+            
+        st.rerun()
+
+
+#========== MAIN CHAT INTERFACE ==========
+# Loading the conversation history from the session state
 for message in st.session_state['message_history']:
     with st.chat_message(message["role"]):
-        st.text(message["content"])
-
-
+        st.markdown(message["content"]) # Using markdown handles layout cleaner than st.text
 
 user_input = st.chat_input("Type your message here...")
 
 if user_input:
-    #add message to session state
+    # Add message to session state
     st.session_state['message_history'].append({"role": "user", "content": user_input})
-
+    
+    # Display the user message in the chat interface
     with st.chat_message('user'): 
-        st.text(user_input)
-
+        st.markdown(user_input)
 
     with st.chat_message('assistant'):
-        #for streaming response from the chatbot
+        # For streaming response from the chatbot
         ai_message = st.write_stream(
-            message_chunk.content for message_chunk,metadata in chatbot.stream(
+            message_chunk.content for message_chunk, metadata in chatbot.stream(
                 {'messages': [HumanMessage(content=user_input)]},
-                config = {'configurable':{'thread_id': 'thread-1'}},
-                stream_mode = 'messages'
+                config=CONFIG,
+                stream_mode='messages'
             )
+            if isinstance(message_chunk, AIMessage)
         )
-    #store ai message to session state
+        
+    # Store ai message to session state
     st.session_state['message_history'].append({"role": "assistant", "content": ai_message})
