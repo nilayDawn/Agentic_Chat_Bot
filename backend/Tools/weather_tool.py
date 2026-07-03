@@ -2,123 +2,136 @@ from langchain_core.tools import tool
 import requests
 import os
 from typing import Any
+from dotenv import load_dotenv
 
-@tool
-def get_current_weather(location: str) -> str:
-    """
-    Get the current real-time weather for a given city or location.
+class WeatherTool:
+    def __init__(self):
+        load_dotenv()
+        self.api_key = os.getenv("OPENWEATHER_API_KEY")
+        self.tool_list = self._setup_tools()
 
-    Args:
-        location: City or location name, for example:
-                  "Dhaka", "London, UK", or "New York, US".
+    def _setup_tools(self):
+        
+        """Set up weather tools"""
+        @tool
+        def get_current_weather(location: str) -> str:
+            """
+            Get the current real-time weather for a given city or location.
 
-    Returns:
-        A formatted current weather report.
-    """
+            Args:
+                location: City or location name, for example:
+                        "Dhaka", "London, UK", or "New York, US".
 
-    api_key = os.getenv("OPENWEATHER_API_KEY")
+            Returns:
+                A formatted current weather report.
+            """
 
-    if not api_key:
-        return (
-            "Weather API key is missing. "
-            "Set the OPENWEATHER_API_KEY environment variable."
-        )
+            api_key = os.getenv("OPENWEATHER_API_KEY")
 
-    try:
-        # Step 1: Convert the location name into latitude and longitude
-        geocoding_url = "https://api.openweathermap.org/geo/1.0/direct"
+            if not api_key:
+                return (
+                    "Weather API key is missing. "
+                    "Set the OPENWEATHER_API_KEY environment variable."
+                )
 
-        geocoding_params = {
-            "q": location,
-            "limit": 1,
-            "appid": api_key,
-        }
+            try:
+                # Step 1: Convert the location name into latitude and longitude
+                geocoding_url = "https://api.openweathermap.org/geo/1.0/direct"
 
-        geo_response = requests.get(
-            geocoding_url,
-            params=geocoding_params,
-            timeout=10,
-        )
-        geo_response.raise_for_status()
+                geocoding_params = {
+                    "q": location,
+                    "limit": 1,
+                    "appid": api_key,
+                }
 
-        locations: list[dict[str, Any]] = geo_response.json()
+                geo_response = requests.get(
+                    geocoding_url,
+                    params=geocoding_params,
+                    timeout=10,
+                )
+                geo_response.raise_for_status()
 
-        if not locations:
-            return f"Could not find the location: {location}"
+                locations: list[dict[str, Any]] = geo_response.json()
 
-        latitude = locations[0]["lat"]
-        longitude = locations[0]["lon"]
-        resolved_name = locations[0].get("name", location)
-        country = locations[0].get("country", "")
-        state = locations[0].get("state", "")
+                if not locations:
+                    return f"Could not find the location: {location}"
 
-        # Step 2: Get current weather using latitude and longitude
-        weather_url = "https://api.openweathermap.org/data/2.5/weather"
+                latitude = locations[0]["lat"]
+                longitude = locations[0]["lon"]
+                resolved_name = locations[0].get("name", location)
+                country = locations[0].get("country", "")
+                state = locations[0].get("state", "")
 
-        weather_params = {
-            "lat": latitude,
-            "lon": longitude,
-            "appid": api_key,
-            "units": "metric",
-        }
+                # Step 2: Get current weather using latitude and longitude
+                weather_url = "https://api.openweathermap.org/data/2.5/weather"
 
-        weather_response = requests.get(
-            weather_url,
-            params=weather_params,
-            timeout=10,
-        )
-        weather_response.raise_for_status()
+                weather_params = {
+                    "lat": latitude,
+                    "lon": longitude,
+                    "appid": api_key,
+                    "units": "metric",
+                }
 
-        weather_data = weather_response.json()
+                weather_response = requests.get(
+                    weather_url,
+                    params=weather_params,
+                    timeout=10,
+                )
+                weather_response.raise_for_status()
 
-        temperature = weather_data["main"]["temp"]
-        feels_like = weather_data["main"]["feels_like"]
-        humidity = weather_data["main"]["humidity"]
-        pressure = weather_data["main"]["pressure"]
-        description = weather_data["weather"][0]["description"]
-        wind_speed = weather_data.get("wind", {}).get("speed", "N/A")
-        visibility_meters = weather_data.get("visibility")
+                weather_data = weather_response.json()
 
-        visibility_km = (
-            round(visibility_meters / 1000, 1)
-            if visibility_meters is not None
-            else "N/A"
-        )
+                temperature = weather_data["main"]["temp"]
+                feels_like = weather_data["main"]["feels_like"]
+                humidity = weather_data["main"]["humidity"]
+                pressure = weather_data["main"]["pressure"]
+                description = weather_data["weather"][0]["description"]
+                wind_speed = weather_data.get("wind", {}).get("speed", "N/A")
+                visibility_meters = weather_data.get("visibility")
 
-        location_parts = [resolved_name]
+                visibility_km = (
+                    round(visibility_meters / 1000, 1)
+                    if visibility_meters is not None
+                    else "N/A"
+                )
 
-        if state:
-            location_parts.append(state)
+                location_parts = [resolved_name]
 
-        if country:
-            location_parts.append(country)
+                if state:
+                    location_parts.append(state)
 
-        display_location = ", ".join(location_parts)
+                if country:
+                    location_parts.append(country)
 
-        return (
-            f"Current weather in {display_location}:\n"
-            f"- Condition: {description.title()}\n"
-            f"- Temperature: {temperature}°C\n"
-            f"- Feels like: {feels_like}°C\n"
-            f"- Humidity: {humidity}%\n"
-            f"- Pressure: {pressure} hPa\n"
-            f"- Wind speed: {wind_speed} m/s\n"
-            f"- Visibility: {visibility_km} km"
-        )
+                display_location = ", ".join(location_parts)
 
-    except requests.Timeout:
-        return "The weather service request timed out. Please try again."
+                return (
+                    f"Current weather in {display_location}:\n"
+                    f"- Condition: {description.title()}\n"
+                    f"- Temperature: {temperature}°C\n"
+                    f"- Feels like: {feels_like}°C\n"
+                    f"- Humidity: {humidity}%\n"
+                    f"- Pressure: {pressure} hPa\n"
+                    f"- Wind speed: {wind_speed} m/s\n"
+                    f"- Visibility: {visibility_km} km"
+                )
 
-    except requests.HTTPError as error:
-        status_code = error.response.status_code if error.response else "unknown"
+            except requests.Timeout:
+                return "The weather service request timed out. Please try again."
 
-        if status_code == 401:
-            return "The OpenWeather API key is invalid or inactive."
+            except requests.HTTPError as error:
+                status_code = error.response.status_code if error.response else "unknown"
 
-        return f"Weather API returned an HTTP error: {status_code}"
+                if status_code == 401:
+                    return "The OpenWeather API key is invalid or inactive."
 
-    except requests.RequestException as error:
-        return f"Could not connect to the weather service: {error}"
+                return f"Weather API returned an HTTP error: {status_code}"
 
-    except (KeyError, TypeError, ValueError) as error:
-        return f"Unexpected weather API response: {error}"
+            except requests.RequestException as error:
+                return f"Could not connect to the weather service: {error}"
+
+            except (KeyError, TypeError, ValueError) as error:
+                return f"Unexpected weather API response: {error}"
+
+        # Return the list of tools
+        return [get_current_weather]

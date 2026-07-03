@@ -4,32 +4,17 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 #-------PACKAGE IMPORTS-------
-from backend.chatbot import chatbot, get_all_thread_ids
-from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage,ToolMessage
+from backend.Agent.chatbot import AIAgent
+from backend.Memory.sqlite import DataBase
+from langchain_core.messages import  AIMessageChunk, HumanMessage
 import streamlit as st
-import uuid    # for generating unique thread ids
+from utils import *
 
-#=========UTILITY FUNCTIONS=========
-def generate_thread_id():
-    return str(uuid.uuid4())
 
-def add_thread_id_to_session(thread_id):
-    
-    if 'thread_ids' not in st.session_state:
-        st.session_state['thread_ids'] = []
-    if thread_id not in st.session_state['thread_ids']:
-        st.session_state['thread_ids'].append(thread_id)
 
-# Create a completely new chat conversation
-def reset_conversation():
-    # Clear the current chat messages from the UI
-    st.session_state['message_history'] = []
-    # Generate a new string thread id
-    new_id = generate_thread_id()
-    st.session_state['current_thread_id'] = new_id
-    # Add thread to the conversation list in the sidebar
-    add_thread_id_to_session(new_id)
-
+#initialize the chatbot
+agent = AIAgent()
+chatbot = agent.build_graph()
 
 #========== STREAMLIT APP INITIALIZATION ==========
 
@@ -37,7 +22,7 @@ st.title("Agentic Chat Bot")
 
 # 1. Master list storing all conversation IDs
 if 'thread_ids' not in st.session_state:
-    st.session_state['thread_ids'] = get_all_thread_ids()
+    st.session_state['thread_ids'] = DataBase().get_all_thread_ids()
 
 # 2. String storing the active conversation ID
 if 'current_thread_id' not in st.session_state:
