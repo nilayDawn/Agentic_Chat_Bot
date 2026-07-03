@@ -93,6 +93,23 @@ def list_conversations():
 
     finally:
         db.close()
+def delete_conversation(thread_id: str):
+    """ Delete a conversation and its associated chat messages and long-term memories based on the thread_id. """
+    db = SessionLocal()
+
+    try:
+        # Delete chat messages associated with the thread_id
+        db.query(ChatMessage).filter(ChatMessage.thread_id == thread_id).delete()
+
+        # Delete long-term memories associated with the thread_id
+        db.query(LongTermMemory).filter(LongTermMemory.thread_id == thread_id).delete()
+
+        # Delete the conversation itself
+        db.query(Conversation).filter(Conversation.thread_id == thread_id).delete()
+
+        db.commit()
+    finally:
+        db.close()
 def save_chat_message(thread_id: str, role: str, content: str):
     """ Save a chat message to the database under the specified thread_id."""
     db = SessionLocal()

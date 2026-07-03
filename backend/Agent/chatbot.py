@@ -1,6 +1,5 @@
 import os
 import sqlite3
-from langchain.messages import HumanMessage,SystemMessage
 from langgraph.graph import StateGraph, START, END , MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -17,11 +16,10 @@ from ..Tools.weather_tool import WeatherTool
 from ..Tools.stock_tool import StockTool
 from ..Tools.search_tool import search_tool
 from ..Tools.rag_tool import rag_tool
+from ..Tools.memory_toos import remember_this, recall_memory
 from ..prompts.prompt import SYSTEM_PROMPT
 
-#import required classes
-from ..GraphStates.ChatState import ChatState
-from ..Memory.database import DataBase
+
 
 load_dotenv()
 
@@ -35,7 +33,10 @@ ALLOWED_MODELS = {
     "gemini-2.5-pro",
     "gemini-2.5-flash-lite", # Included the lite version if needed
     "gemini-1.5-flash",      # Kept for fallback compatibility 
-    "gemini-1.5-pro"
+    "gemini-1.5-pro",
+    "mistral-small-latest",
+    "mistral-medium-latest",
+    "mistral-large-latest",
 }
 
 def normalize_model_name(model_name: str | None) -> str:
@@ -70,7 +71,10 @@ def build_agent(model_name: str | None = None):
             *WeatherTool().tool_list, 
             *StockTool().tool_list,
             search_tool,
-            rag_tool]
+            rag_tool,
+            remember_this,
+            recall_memory
+            ]
 
     #bind tools
     llm_with_tools = llm.bind_tools(tools)
@@ -89,7 +93,7 @@ def build_agent(model_name: str | None = None):
     workflow.add_node("chatbot",chatbot_node)
     workflow.add_node("tools",tool_node)
 
-    workflow.add_edge("START","chatbot")
+    workflow.add_edge(START, "chatbot")
     workflow.add_conditional_edges("chatbot",tools_condition)
     workflow.add_edge("tools","chatbot")
 
