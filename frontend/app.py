@@ -5,7 +5,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 #-------PACKAGE IMPORTS-------
 from backend.chatbot import chatbot, get_all_thread_ids
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage,ToolMessage
 import streamlit as st
 import uuid    # for generating unique thread ids
 
@@ -14,6 +14,7 @@ def generate_thread_id():
     return str(uuid.uuid4())
 
 def add_thread_id_to_session(thread_id):
+    
     if 'thread_ids' not in st.session_state:
         st.session_state['thread_ids'] = []
     if thread_id not in st.session_state['thread_ids']:
@@ -118,16 +119,72 @@ if user_input:
     with st.chat_message('user'): 
         st.markdown(user_input)
 
-    with st.chat_message('assistant'):
-        # For streaming response from the chatbot
-        ai_message = st.write_stream(
-            message_chunk.content for message_chunk, metadata in chatbot.stream(
-                {'messages': [HumanMessage(content=user_input)]},
-                config=CONFIG,
-                stream_mode='messages'
+    with st.chat_message("assistant"):
+
+        # Container to show tool activity
+        tool_status = st.status("🤔 Thinking...", expanded=True)
+
+        # Placeholder for the streamed response
+        response_placeholder = st.empty()
+
+        full_response = ""
+        used_tools = set()
+
+        # Stream from your chatbot/graph
+        for message_chunk, metadata in chatbot.stream(
+            {"messages": [HumanMessage(content=user_input)]},
+            config=CONFIG,
+            stream_mode="messages"
+        ):
+
+            # Detect tool calls
+            if isinstance(message_chunk, AIMessageChunk):
+                tool_calls = getattr(message_chunk, "tool_calls", [])
+
+                for tool_call in tool_calls:
+                    tool_name = tool_call.get("name", "Unknown Tool")
+
+                    # Avoid showing the same tool repeatedly
+                    if tool_name not in used_tools:
+                        used_tools.add(tool_name)
+                        tool_status.write(f"🔧 Using **{tool_name}**")
+
+            # Stream assistant text
+            if isinstance(message_chunk, AIMessageChunk):
+
+                content = message_chunk.content
+
+                # Case 1: content is a string
+                if isinstance(content, str):
+                    full_response += content
+
+                # Case 2: content is a list
+                elif isinstance(content, list):
+                    for item in content:
+                        if isinstance(item, dict):
+                            if item.get("type") == "text":
+                                full_response += item.get("text", "")
+                        elif isinstance(item, str):
+                            full_response += item
+
+                response_placeholder.markdown(full_response)
+
+        # Update final status
+        if used_tools:
+            tool_status.update(
+                label=f"✅ Finished ({len(used_tools)} tool(s) used)",
+                state="complete",
+                expanded=False
             )
-            if isinstance(message_chunk, AIMessage)
-        )
-        
-    # Store ai message to session state
-    st.session_state['message_history'].append({"role": "assistant", "content": ai_message})
+        else:
+            tool_status.update(
+                label="✅ Response generated",
+                state="complete",
+                expanded=False
+            )
+
+    # Save to chat history if needed
+    st.session_state.message_history.append(
+        {"role": "assistant", "content": full_response}
+    )       
+   
