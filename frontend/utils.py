@@ -21,3 +21,14 @@ def reset_conversation():
     st.session_state['current_thread_id'] = new_id
     # Add thread to the conversation list in the sidebar
     add_thread_id_to_session(new_id)
+
+def check_thread_interrupted(chatbot, thread_id):
+    """Check if a given thread ID has any active interrupts."""
+    try:
+        state = chatbot.get_state({'configurable': {'thread_id': thread_id}})
+        if state.tasks and any(task.interrupts for task in state.tasks):
+            return True
+    except Exception:
+        pass
+    return False
+

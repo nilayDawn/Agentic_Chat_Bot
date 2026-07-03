@@ -2,6 +2,7 @@ from langchain.messages import HumanMessage
 from langgraph.graph import StateGraph, START, END
 from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_mistralai import ChatMistralAI
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -27,11 +28,15 @@ class AIAgent:
         self.rag_tool = rag_tool
 
         # LLM 
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            temperature=0.7
+        # self.llm = ChatGoogleGenerativeAI(
+        #     model="gemini-2.5-flash",
+        #     temperature=0.7
+        # )
+        self.llm = ChatMistralAI(
+            model_name="mistral-small-latest", 
+            temperature=0.5,
+            max_retries=1
         )
-
         self.tools = []
         self.tools.extend([
             self.calculator,
