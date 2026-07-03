@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 #-------PACKAGE IMPORTS-------
-from backend.chatbot import chatbot
+from backend.chatbot import chatbot, get_all_thread_ids
 from langchain_core.messages import AIMessage, HumanMessage
 import streamlit as st
 import uuid    # for generating unique thread ids
@@ -36,7 +36,7 @@ st.title("Agentic Chat Bot")
 
 # 1. Master list storing all conversation IDs
 if 'thread_ids' not in st.session_state:
-    st.session_state['thread_ids'] = []
+    st.session_state['thread_ids'] = get_all_thread_ids()
 
 # 2. String storing the active conversation ID
 if 'current_thread_id' not in st.session_state:
