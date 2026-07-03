@@ -11,6 +11,8 @@ from ..Tools.calculator_tool import calculator
 from ..Tools.weather_tool import WeatherTool
 from ..Tools.stock_tool import StockTool
 from ..Tools.search_tool import search_tool
+from ..Tools.rag_tool import rag_tool
+from ..prompts.prompt import SYSTEM_PROMPT
 
 #import required classes
 from ..GraphStates.ChatState import ChatState
@@ -22,6 +24,7 @@ class AIAgent:
         self.weather_tool = WeatherTool()
         self.stock_tool = StockTool()
         self.search_tool = search_tool
+        self.rag_tool = rag_tool
 
         # LLM 
         self.llm = ChatGoogleGenerativeAI(
@@ -34,18 +37,25 @@ class AIAgent:
             self.calculator,
             *self.weather_tool.tool_list,
             *self.stock_tool.tool_list,
-            self.search_tool
+            self.search_tool,
+            self.rag_tool
         ])
 
         self.tool_node = ToolNode(self.tools)
         self.llm_with_tools = self.llm.bind_tools(self.tools)
         self.checkpoint = DataBase().checkpoint
         self.chatbot = None
+        self.system_message = SYSTEM_PROMPT
      
     def build_graph(self):
         def chat_node(state: ChatState):
             #take user query form state
-            messaages = state["messages"]
+            # `state["messages"]` is already a list of BaseMessage (LangChain message objects).
+            # LangChain expects a *flat* list of messages, not a nested list.
+            messaages = [
+                self.system_message,
+                *state["messages"],
+            ]
 
             #send to llm and get response
             response = self.llm_with_tools.invoke(messaages)

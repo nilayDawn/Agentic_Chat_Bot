@@ -9,6 +9,8 @@ from backend.Memory.sqlite import DataBase
 from langchain_core.messages import  AIMessageChunk, HumanMessage
 import streamlit as st
 from utils import *
+from backend.Tools.rag_tool import ingest_document
+import os
 
 
 
@@ -87,6 +89,66 @@ for index, thread_id in enumerate(st.session_state['thread_ids'][::-1]):
             
         st.rerun()
 
+#========== DOCUMENT UPLOAD ==========
+
+# Store uploaded document info
+if 'uploaded_document' not in st.session_state:
+    st.session_state['uploaded_document'] = None
+
+# Upload area placed above the chat
+uploaded_file = st.file_uploader(
+    "Upload PDF",
+    type=["pdf"],
+    label_visibility="collapsed"
+)
+
+# Process uploaded file only once
+if uploaded_file is not None:
+
+    if (
+        st.session_state['uploaded_document'] is None
+        or st.session_state['uploaded_document'] != uploaded_file.name
+    ):
+
+        with st.spinner("Processing document..."):
+
+            # Create uploads folder
+            os.makedirs("uploads", exist_ok=True)
+
+            # Save uploaded PDF locally
+            file_path = os.path.join(
+                "uploads",
+                uploaded_file.name
+            )
+
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.getbuffer())
+
+            # Ingest document into vector database
+            ingest_document(file_path)
+
+            st.session_state['uploaded_document'] = uploaded_file.name
+
+        st.success(
+            f"Document '{uploaded_file.name}' added successfully."
+        )
+
+# ChatGPT-style attachment indicator
+if st.session_state['uploaded_document']:
+
+    with st.container(border=True):
+        col1, col2 = st.columns([1, 10])
+
+        with col1:
+            st.markdown("📄")
+
+        with col2:
+            st.markdown(
+                f"**{st.session_state['uploaded_document']}**"
+            )
+            st.caption(
+                "Attached document available for retrieval"
+            )
 
 #========== MAIN CHAT INTERFACE ==========
 # Loading the conversation history from the session state
