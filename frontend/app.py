@@ -5,7 +5,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 #-------PACKAGE IMPORTS-------
 from backend.Agent.chatbot import AIAgent
-from backend.Memory.sqlite import DataBase
+from backend.Memory.database import DataBase
 from langchain_core.messages import  AIMessageChunk, HumanMessage
 from langgraph.types import Command
 import streamlit as st
