@@ -33,6 +33,9 @@ class ChatMessage(Base):
     thread_id = Column(String, index=True)
     role = Column(String)
     content = Column(Text)
+    file_name = Column(String, nullable=True)
+    file_size = Column(Integer, nullable=True)
+    tool_calls = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -47,6 +50,26 @@ class LongTermMemory(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
+    # Automatically migrate existing databases to include file_name and file_size columns
+    import sqlite3
+    db_path = "Data/agent_memory.db"
+    if Path(db_path).exists():
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        try:
+            cursor.execute("PRAGMA table_info(chat_messages);")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "file_name" not in columns:
+                cursor.execute("ALTER TABLE chat_messages ADD COLUMN file_name VARCHAR;")
+            if "file_size" not in columns:
+                cursor.execute("ALTER TABLE chat_messages ADD COLUMN file_size INTEGER;")
+            if "tool_calls" not in columns:
+                cursor.execute("ALTER TABLE chat_messages ADD COLUMN tool_calls TEXT;")
+            conn.commit()
+        except Exception as e:
+            print("Database migration warning:", e)
+        finally:
+            conn.close()
 
 
 #----Utility Funcitons----
@@ -110,7 +133,7 @@ def delete_conversation(thread_id: str):
         db.commit()
     finally:
         db.close()
-def save_chat_message(thread_id: str, role: str, content: str):
+def save_chat_message(thread_id: str, role: str, content: str, file_name: str | None = None, file_size: int | None = None, tool_calls: str | None = None):
     """ Save a chat message to the database under the specified thread_id."""
     db = SessionLocal()
 
@@ -119,6 +142,9 @@ def save_chat_message(thread_id: str, role: str, content: str):
             thread_id=thread_id,
             role=role,
             content=content,
+            file_name=file_name,
+            file_size=file_size,
+            tool_calls=tool_calls,
             created_at=datetime.utcnow()
         )
 
@@ -173,13 +199,29 @@ def search_memory(thread_id: str, query: str):
     db = SessionLocal()
 
     try:
+        query_filter = db.query(LongTermMemory)
+        
+        # Perform substring matching if query has text
+        search_text = query.strip() if query else ""
+        if search_text and search_text != "*":
+            search_term = f"%{search_text}%"
+            query_filter = query_filter.filter(LongTermMemory.memory.like(search_term))
+            
         memories = (
-            db.query(LongTermMemory)
-            .filter(LongTermMemory.thread_id == thread_id)
+            query_filter
             .order_by(LongTermMemory.created_at.desc())
             .limit(20)
             .all()
         )
+
+        # Fallback to the most recent memories if no specific matches found
+        if not memories:
+            memories = (
+                db.query(LongTermMemory)
+                .order_by(LongTermMemory.created_at.desc())
+                .limit(20)
+                .all()
+            )
 
         if not memories:
             return "No saved memory found."

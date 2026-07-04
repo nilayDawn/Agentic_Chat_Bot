@@ -11,13 +11,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 #import tools
-from ..Tools.calculator_tool import calculator
-from ..Tools.weather_tool import WeatherTool
-from ..Tools.stock_tool import StockTool
-from ..Tools.search_tool import search_tool
-from ..Tools.rag_tool import rag_tool
-from ..Tools.memory_toos import remember_this, recall_memory
-from ..prompts.prompt import SYSTEM_PROMPT
+from Tools.calculator_tool import calculator
+from Tools.weather_tool import WeatherTool
+from Tools.stock_tool import StockTool
+from Tools.search_tool import search_tool
+from Tools.rag_tool import rag_tool
+from Tools.memory_toos import remember_this, recall_memory
+from prompts.prompt import SYSTEM_PROMPT
 
 
 

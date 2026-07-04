@@ -1,5 +1,5 @@
-from ..Agent.chatbot import get_agent
-from ..Memory.database import init_db
+from Agent.chatbot import get_agent
+from Memory.database import init_db
 from langchain_core.messages import HumanMessage, SystemMessage
 
 init_db()  # Initialize the database when the module is imported

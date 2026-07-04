@@ -1,5 +1,5 @@
 from langchain_core.tools import tool
-from ..Memory.database import save_memory, search_memory
+from Memory.database import save_memory, search_memory
 
 CURRENT_THREAD_ID = "default"
 
