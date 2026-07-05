@@ -7,7 +7,6 @@ import json
 import uvicorn
 from fastapi import FastAPI, Request, UploadFile, File, Form
 from fastapi.responses import StreamingResponse, JSONResponse
-from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
 
 from langchain_core.messages import AIMessage, HumanMessage,ToolMessage,AIMessageChunk
@@ -146,6 +145,8 @@ async def chat_stream(request: Request):
     user_message = data.get("message", "")
     thread_id = data.get("thread_id", "default")
     selected_model = data.get("model", "gemini-2.5-flash")
+    provider = data.get("provider", None)
+    api_keys = data.get("api_keys", {})
     file_name = data.get("file_name", None)
     file_size = data.get("file_size", None)
 
@@ -164,7 +165,10 @@ async def chat_stream(request: Request):
 
     config = {
         "configurable": {
-            "thread_id": thread_id
+            "thread_id": thread_id,
+            "model_name": selected_model,
+            "provider": provider,
+            "api_keys": api_keys
         }
     }
 
@@ -198,11 +202,9 @@ async def chat_stream(request: Request):
                         tc_id = tc.get("id")
                         tc_name = tc.get("name")
                         if tc_id and tc_name:
-                            tc_args = tc.get("args")
                             tool_calls_data[tc_id] = {
                                 "id": tc_id,
                                 "name": tc_name,
-                                "args": tc_args,
                                 "status": "running"
                             }
                             yield sse_data({
@@ -217,11 +219,8 @@ async def chat_stream(request: Request):
                             tool_calls_data[tc_id] = {
                                 "id": tc_id,
                                 "name": chunk.name or "tool",
-                                "args": {},
                             }
                         tool_calls_data[tc_id]["status"] = "done"
-                        # Snip the output to avoid overloading client memory
-                        tool_calls_data[tc_id]["output"] = str(chunk.content)[:1200]
                         yield sse_data({
                             "tool_call": tool_calls_data[tc_id]
                         })
@@ -259,8 +258,5 @@ async def chat_stream(request: Request):
         }
     )
 
-
-
-    
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000,reload=True, log_level="info")

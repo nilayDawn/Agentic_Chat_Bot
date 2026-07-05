@@ -1,29 +1,19 @@
-
 from pypdf import PdfReader
 import docx2txt
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-from langchain_mistralai import MistralAIEmbeddings
-from langchain_community.vectorstores import FAISS
+from langchain_chroma import Chroma
 from langchain.tools import tool
 from langchain_core.documents import Document
 import os
-
 from pathlib import Path
+import Tools.memory_toos as _memory_state
 
 Path('uploads').mkdir(parents=True, exist_ok=True)
-
-
-CURRENT_THREAD_ID = "default"
-
-
-def set_current_thread_id(thread_id: str):
-    global CURRENT_THREAD_ID
-    CURRENT_THREAD_ID = thread_id
+Path('database').mkdir(parents=True, exist_ok=True)
 
 # Embeddings model
 embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
-#embeddings = MistralAIEmbeddings(model="mistral-embed")
 
 def read_file_text(file_path: str) -> str:
     path = Path(file_path)
@@ -66,38 +56,37 @@ def ingest_document(file_path: str, thread_id: str):
         for chunk in chunks
     ]
 
-    db_path = 'database/faiss_db'
-    db_exists = os.path.exists(db_path)
-    # Create or load FAISS vector store
-    if db_exists:
-        db = FAISS.load_local(
-            db_path,
-            embeddings,
-            allow_dangerous_deserialization=True
-        )
-        db.add_documents(docs)
-    else:
-        db = FAISS.from_documents(docs, embeddings)
+    db_path = 'database/chroma_db'
+    db = Chroma(
+        persist_directory=db_path,
+        embedding_function=embeddings,
+        collection_name="rag_documents"
+    )
+    db.add_documents(docs)
 
-    db.save_local(db_path)
-
-def get_retriever(query: str, k: int = 4, thread_id: str = CURRENT_THREAD_ID):
-    db_path = 'database/faiss_db'
+def get_retriever(query: str, k: int = 4, thread_id: str | None = None):
+    thread_id = thread_id or _memory_state.CURRENT_THREAD_ID
+    db_path = 'database/chroma_db'
     if not os.path.exists(db_path):
-        raise FileNotFoundError("FAISS database not found. Please ingest documents first.")
+        raise FileNotFoundError("Chroma database not found. Please ingest documents first.")
     
-    db = FAISS.load_local(db_path, embeddings , allow_dangerous_deserialization=True)
-    retriever =  db.as_retriever(
-        query=query,
-        search_type="similarity",  # Use similarity search
-        search_kwargs={"k": k},  # Retrieve top k relevant chunks
-        filter = {"thread_id": thread_id}
+    db = Chroma(
+        persist_directory=db_path,
+        embedding_function=embeddings,
+        collection_name="rag_documents"
+    )
+    retriever = db.as_retriever(
+        search_type="similarity",
+        search_kwargs={
+            "k": k,
+            "filter": {"thread_id": thread_id}
+        }
     )
     return retriever
 
 
 @tool
-def rag_tool(query: str, thread_id: str = CURRENT_THREAD_ID) -> str:
+def rag_tool(query: str) -> str:
     """
     A tool that uses a retriever to fetch relevant information based on the query. Use this tool to answer questions based on the ingested documents. The tool will return a string response containing the relevant information.
 
@@ -107,21 +96,20 @@ def rag_tool(query: str, thread_id: str = CURRENT_THREAD_ID) -> str:
     Returns:
         str: A string response containing the relevant information based on the query.
     """
-    retriever = get_retriever(query, thread_id=thread_id)  
-    docs = retriever.invoke(query, thread_id=thread_id)
+    try:
+        thread_id = _memory_state.CURRENT_THREAD_ID
+        retriever = get_retriever(query, thread_id=thread_id)
+        docs = retriever.invoke(query)
+    except FileNotFoundError:
+        return "No documents have been uploaded yet. Please upload documents before querying."
 
     if not docs:
         return "No relevant information found in the given documents."
 
     formatted_docs = []
-
-    for index, doc in enumerate(docs):
-        source = doc.metadata.get("source", "Unknown Source")
-        page = doc.metadata.get("page", "Unknown Page")
-
-        for i, doc in enumerate(docs, start=1):
-            source = doc.metadata.get("source", "uploaded document")
-            formatted_docs.append(
-                f"[Source {i}: {source}]\n{doc.page_content}"
-            )
+    for i, doc in enumerate(docs, start=1):
+        source = doc.metadata.get("source", "uploaded document")
+        formatted_docs.append(
+            f"[Source {i}: {source}]\n{doc.page_content}"
+        )
     return "\n\n".join(formatted_docs)
