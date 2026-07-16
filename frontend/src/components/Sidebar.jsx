@@ -1,31 +1,9 @@
-"use client";
-
 import { useState } from "react";
-import { Trash2, MessageSquare, ChevronDown, ChevronRight, Plus, Edit3 } from "lucide-react";
-import { deleteConversation } from "@/lib/api";
+import { Trash2, ChevronDown, ChevronRight, Edit3, Settings } from "lucide-react";
+import { deleteConversation } from "../lib/api";
+import { groupConversationsByDate } from "../utils/dateGroups";
 
-function groupConversationsByDate(conversations) {
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const yesterday = new Date(today);
-  yesterday.setDate(today.getDate() - 1);
-  const lastWeek = new Date(today);
-  lastWeek.setDate(today.getDate() - 7);
-
-  const groups = { Today: [], Yesterday: [], "Last 7 Days": [], Older: [] };
-
-  for (const conv of conversations) {
-    const d = new Date(conv.updated_at);
-    const day = new Date(d.getFullYear(), d.getMonth(), d.getDate());
-
-    if (day >= today) groups["Today"].push(conv);
-    else if (day >= yesterday) groups["Yesterday"].push(conv);
-    else if (day >= lastWeek) groups["Last 7 Days"].push(conv);
-    else groups["Older"].push(conv);
-  }
-
-  return groups;
-}
+// ─── ConversationItem ─────────────────────────────────────────────────────────
 
 function ConversationItem({ conv, isActive, onClick, onDelete }) {
   const [hovered, setHovered] = useState(false);
@@ -49,42 +27,103 @@ function ConversationItem({ conv, isActive, onClick, onDelete }) {
 
   return (
     <div
-      className={`group relative flex items-center gap-2.5 px-3 py-2.5 rounded-lg cursor-pointer transition-all duration-150 ${
-        isActive
-          ? "bg-[#2a2a2a] text-white"
-          : "text-[#b3b3b3] hover:bg-[#212121] hover:text-white"
-      }`}
+      style={{
+        position: "relative",
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        padding: "8px 12px",
+        borderRadius: "8px",
+        cursor: "pointer",
+        transition: "background 0.15s, color 0.15s",
+        background: isActive ? "#2a2a2a" : hovered ? "#1e1e1e" : "transparent",
+        color: isActive ? "#fff" : hovered ? "#fff" : "#b3b3b3",
+      }}
       onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <span className="flex-1 text-[13.5px] truncate leading-snug">{title}</span>
-      <button
-        onClick={handleDelete}
-        className="shrink-0 p-1 rounded-md opacity-0 group-hover:opacity-100 text-[#666] hover:text-red-400 hover:bg-red-400/10 transition-all"
-        title="Delete"
+      <span
+        style={{
+          flex: 1,
+          fontSize: "13.5px",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+          lineHeight: "1.35",
+        }}
       >
-        <Trash2 size={13} />
-      </button>
+        {title}
+      </span>
+
+      {hovered && (
+        <button
+          onClick={handleDelete}
+          title="Delete conversation"
+          style={{
+            flexShrink: 0,
+            padding: "4px",
+            borderRadius: "6px",
+            border: "none",
+            background: "transparent",
+            color: "#666",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "color 0.15s, background 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "#f87171";
+            e.currentTarget.style.background = "rgba(239,68,68,0.1)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "#666";
+            e.currentTarget.style.background = "transparent";
+          }}
+        >
+          <Trash2 size={13} />
+        </button>
+      )}
     </div>
   );
 }
+
+// ─── GroupSection ─────────────────────────────────────────────────────────────
 
 function GroupSection({ title, items, activeThreadId, onSelect, onDelete }) {
   const [collapsed, setCollapsed] = useState(false);
   if (items.length === 0) return null;
 
   return (
-    <div className="mb-3">
+    <div style={{ marginBottom: "12px" }}>
       <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center gap-1 w-full px-3 py-1 text-[11px] font-semibold text-[#555] uppercase tracking-widest hover:text-[#888] transition-colors"
+        onClick={() => setCollapsed((c) => !c)}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "4px",
+          width: "100%",
+          padding: "4px 12px",
+          background: "none",
+          border: "none",
+          color: "#555",
+          fontSize: "11px",
+          fontWeight: 600,
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          cursor: "pointer",
+          transition: "color 0.15s",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = "#888")}
+        onMouseLeave={(e) => (e.currentTarget.style.color = "#555")}
       >
         {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
         {title}
       </button>
+
       {!collapsed && (
-        <div className="mt-0.5 space-y-0.5">
+        <div style={{ marginTop: "2px", display: "flex", flexDirection: "column", gap: "2px" }}>
           {items.map((conv) => (
             <ConversationItem
               key={conv.thread_id}
@@ -100,6 +139,8 @@ function GroupSection({ title, items, activeThreadId, onSelect, onDelete }) {
   );
 }
 
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+
 export default function Sidebar({
   conversations,
   activeThreadId,
@@ -107,15 +148,16 @@ export default function Sidebar({
   onNewChat,
   onDeleteConversation,
   isOpen,
+  onOpenSettings,
 }) {
   const groups = groupConversationsByDate(conversations);
 
   return (
     <aside
       style={{
-        width: isOpen ? "260px" : "0px",
-        minWidth: isOpen ? "260px" : "0px",
-        overflow: "hidden",
+        width:     isOpen ? "260px" : "0px",
+        minWidth:  isOpen ? "260px" : "0px",
+        overflow:  "hidden",
         transition: "width 0.25s ease, min-width 0.25s ease",
         background: "#171717",
         borderRight: "1px solid #2b2b2b",
@@ -125,23 +167,64 @@ export default function Sidebar({
         flexShrink: 0,
       }}
     >
-      {/* Sidebar header */}
-      <div className="flex items-center justify-between px-4 h-14 shrink-0">
-        <span className="text-[15px] font-semibold text-white tracking-tight">AgentChat</span>
+      {/* Header */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0 16px",
+          height: "56px",
+          flexShrink: 0,
+        }}
+      >
+        <span style={{ fontSize: "15px", fontWeight: 600, color: "#fff", letterSpacing: "-0.02em" }}>
+          AgentChat
+        </span>
         <button
           onClick={onNewChat}
           title="New chat"
-          className="p-1.5 rounded-lg text-[#888] hover:text-white hover:bg-[#2a2a2a] transition-colors"
+          style={{
+            padding: "6px",
+            borderRadius: "8px",
+            border: "none",
+            background: "transparent",
+            color: "#888",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "color 0.15s, background 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "#fff";
+            e.currentTarget.style.background = "#2a2a2a";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "#888";
+            e.currentTarget.style.background = "transparent";
+          }}
         >
           <Edit3 size={15} />
         </button>
       </div>
 
       {/* Conversation list */}
-      <div className="flex-1 overflow-y-auto px-2 py-1">
+      <div style={{ flex: 1, overflowY: "auto", padding: "4px 8px" }}>
         {conversations.length === 0 ? (
-          <p className="text-center text-[12px] text-[#444] mt-8 px-4 leading-relaxed">
-            No conversations yet.<br />Start chatting!
+          <p
+            style={{
+              textAlign: "center",
+              fontSize: "12px",
+              color: "#444",
+              marginTop: "32px",
+              padding: "0 16px",
+              lineHeight: 1.6,
+            }}
+          >
+            No conversations yet.
+            <br />
+            Start chatting!
           </p>
         ) : (
           Object.entries(groups).map(([groupName, items]) => (
@@ -158,8 +241,45 @@ export default function Sidebar({
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-3 border-t border-[#2b2b2b] shrink-0">
-        <p className="text-[11px] text-[#3a3a3a]">Agentic Chat Bot v1.0</p>
+      <div
+        style={{
+          padding: "12px 16px",
+          borderTop: "1px solid #2b2b2b",
+          flexShrink: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <p style={{ margin: 0, fontSize: "11px", color: "#3a3a3a" }}>
+          Agentic Chat Bot v1.0
+        </p>
+        <button
+          onClick={onOpenSettings}
+          title="Settings"
+          style={{
+            padding: "4px",
+            borderRadius: "6px",
+            border: "none",
+            background: "transparent",
+            color: "#888",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            transition: "color 0.15s, background 0.15s",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = "#fff";
+            e.currentTarget.style.background = "#2a2a2a";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = "#888";
+            e.currentTarget.style.background = "transparent";
+          }}
+        >
+          <Settings size={13} />
+        </button>
       </div>
     </aside>
   );

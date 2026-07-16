@@ -1,33 +1,47 @@
-"use client";
-
-import { useRef, useEffect, useState, useCallback } from "react";
-import MessageBubble from "./MessageBubble";
+import { useRef, useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import MessageBubble from "./MessageBubble";
+import { SUGGESTIONS } from "../constants/suggestions";
 
-const SUGGESTIONS = [
-  {
-    icon: "📈",
-    label: "Stock info",
-    text: "What is the current stock price of Apple (AAPL)?",
-  },
-  {
-    icon: "🌤",
-    label: "Weather",
-    text: "What is the weather in New York City right now?",
-  },
-  {
-    icon: "🔍",
-    label: "Web search",
-    text: "Search the web for the latest AI news.",
-  },
-  {
-    icon: "🧮",
-    label: "Calculator",
-    text: "Calculate 15% tip on a $87.50 restaurant bill.",
-  },
-];
+// ─── SuggestionCard ───────────────────────────────────────────────────────────
 
-function WelcomeScreen({ onSuggestionClick }) {
+function SuggestionCard({ item, onClick }) {
+  return (
+    <button
+      onClick={onClick}
+      className="suggestion-card"
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: "6px",
+        padding: "16px",
+        borderRadius: "12px",
+        background: "#212121",
+        border: "1px solid #2b2b2b",
+        cursor: "pointer",
+        textAlign: "left",
+        transition: "background 0.15s, border-color 0.15s, transform 0.15s, box-shadow 0.15s",
+        width: "100%",
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+        <span style={{ fontSize: "16px" }}>{item.icon}</span>
+        <span
+          style={{ fontSize: "13.5px", fontWeight: 600, color: "#d1d1d1", transition: "color 0.15s" }}
+          className="suggestion-label"
+        >
+          {item.label}
+        </span>
+      </div>
+      <span style={{ fontSize: "12px", color: "#555", lineHeight: 1.5 }}>{item.text}</span>
+    </button>
+  );
+}
+
+// ─── WelcomeScreen ────────────────────────────────────────────────────────────
+
+function WelcomeScreen({ onSuggestionClick, onOpenSettings }) {
   return (
     <div
       style={{
@@ -40,7 +54,7 @@ function WelcomeScreen({ onSuggestionClick }) {
         overflowY: "auto",
       }}
     >
-      {/* Icon */}
+      {/* Brand icon */}
       <div
         style={{
           width: "56px",
@@ -84,12 +98,54 @@ function WelcomeScreen({ onSuggestionClick }) {
           maxWidth: "340px",
           textAlign: "center",
           lineHeight: 1.6,
-          marginBottom: "36px",
+          marginBottom: "20px",
         }}
       >
-        Agentic AI with tools for weather, stocks, web search,
-        calculations, and document Q&amp;A.
+        Agentic AI with tools for weather, stocks, web search, calculations, and document Q&amp;A.
       </p>
+
+      {/* API key notice */}
+      <div
+        onClick={onOpenSettings}
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => e.key === "Enter" && onOpenSettings()}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          padding: "10px 16px",
+          borderRadius: "10px",
+          background: "rgba(168, 85, 247, 0.08)",
+          border: "1px solid rgba(168, 85, 247, 0.2)",
+          fontSize: "12.5px",
+          color: "#c084fc",
+          cursor: "pointer",
+          marginBottom: "32px",
+          width: "100%",
+          maxWidth: "480px",
+          textAlign: "center",
+          justifyContent: "center",
+          transition: "background 0.15s, border-color 0.15s",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = "rgba(168, 85, 247, 0.12)";
+          e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.35)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = "rgba(168, 85, 247, 0.08)";
+          e.currentTarget.style.borderColor = "rgba(168, 85, 247, 0.2)";
+        }}
+      >
+        <span style={{ fontSize: "14px" }}>🔑</span>
+        <span>
+          Configure your custom <strong>API Keys</strong> in{" "}
+          <span style={{ textDecoration: "underline", color: "#d8b4fe", fontWeight: 600 }}>
+            Settings
+          </span>{" "}
+          to use different models
+        </span>
+      </div>
 
       {/* Suggestion cards */}
       <div
@@ -102,71 +158,32 @@ function WelcomeScreen({ onSuggestionClick }) {
         }}
       >
         {SUGGESTIONS.map((s) => (
-          <SuggestionCard key={s.label} item={s} onClick={() => onSuggestionClick(s.text)} />
+          <SuggestionCard
+            key={s.label}
+            item={s}
+            onClick={() => onSuggestionClick(s.text)}
+          />
         ))}
       </div>
     </div>
   );
 }
 
-function SuggestionCard({ item, onClick }) {
-  const [hovered, setHovered] = useState(false);
+// ─── ChatArea ─────────────────────────────────────────────────────────────────
 
-  return (
-    <button
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-start",
-        gap: "6px",
-        padding: "16px",
-        borderRadius: "12px",
-        background: hovered ? "#2a2a2a" : "#212121",
-        border: hovered ? "1px solid #19c37d44" : "1px solid #2b2b2b",
-        cursor: "pointer",
-        textAlign: "left",
-        transition: "all 0.15s ease",
-        transform: hovered ? "translateY(-1px)" : "translateY(0)",
-        boxShadow: hovered ? "0 4px 20px rgba(0,0,0,0.3)" : "none",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-        <span style={{ fontSize: "16px" }}>{item.icon}</span>
-        <span
-          style={{
-            fontSize: "13.5px",
-            fontWeight: 600,
-            color: hovered ? "#19c37d" : "#d1d1d1",
-            transition: "color 0.15s",
-          }}
-        >
-          {item.label}
-        </span>
-      </div>
-      <span
-        style={{
-          fontSize: "12px",
-          color: "#555",
-          lineHeight: 1.5,
-        }}
-      >
-        {item.text}
-      </span>
-    </button>
-  );
-}
-
+/**
+ * Renders the scrollable message list, a loading skeleton, or the welcome screen.
+ */
 export default function ChatArea({
   messages,
   isStreaming,
   loadingHistory,
   onSuggestionClick,
+  onOpenSettings,
 }) {
   const bottomRef = useRef(null);
 
+  // Auto-scroll to the latest message
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isStreaming]);
@@ -184,27 +201,31 @@ export default function ChatArea({
           color: "#555",
         }}
       >
-        <Loader2 size={24} style={{ animation: "spin 1s linear infinite" }} />
+        <Loader2 size={24} className="spin" />
         <span style={{ fontSize: "13px" }}>Loading conversation…</span>
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
   }
 
   if (messages.length === 0) {
-    return <WelcomeScreen onSuggestionClick={onSuggestionClick} />;
+    return (
+      <WelcomeScreen
+        onSuggestionClick={onSuggestionClick}
+        onOpenSettings={onOpenSettings}
+      />
+    );
   }
 
   return (
     <div style={{ flex: 1, overflowY: "auto" }}>
-      <div style={{ maxWidth: "720px", margin: "0 auto", width: "100%", paddingBottom: "8px" }}>
+      <div
+        style={{ maxWidth: "720px", margin: "0 auto", width: "100%", paddingBottom: "8px" }}
+      >
         {messages.map((msg, idx) => (
           <MessageBubble
             key={msg.id}
             message={msg}
-            isStreaming={
-              isStreaming && idx === messages.length - 1 && msg.role === "assistant"
-            }
+            isStreaming={isStreaming && idx === messages.length - 1 && msg.role === "assistant"}
           />
         ))}
         <div ref={bottomRef} style={{ height: "8px" }} />

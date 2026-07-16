@@ -1,14 +1,19 @@
-"use client";
-
 import { useState, useCallback } from "react";
-import Sidebar from "@/components/Sidebar";
-import Topbar from "@/components/Topbar";
-import ChatArea from "@/components/ChatArea";
-import ChatInput from "@/components/ChatInput";
-import { useChatStore } from "@/hooks/useChatStore";
+import Sidebar from "./components/Sidebar";
+import Topbar from "./components/Topbar";
+import ChatArea from "./components/ChatArea";
+import ChatInput from "./components/ChatInput";
+import SettingsModal from "./components/SettingsModal";
+import { useChatStore } from "./hooks/useChatStore";
 
-export default function ChatPage() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+/**
+ * App — root component.
+ * Owns sidebar-open / settings-open UI state and wires
+ * all sub-components to the shared useChatStore hook.
+ */
+export default function App() {
+  const [sidebarOpen,  setSidebarOpen]  = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const {
     conversations,
@@ -16,18 +21,22 @@ export default function ChatPage() {
     messages,
     isStreaming,
     selectedModel,
+    selectedProvider,
+    apiKeys,
     loadingHistory,
     setSelectedModel,
+    setApiKeys,
     selectConversation,
     startNewChat,
     sendMessage,
     stopStreaming,
     removeConversation,
+    setActiveThreadId,
   } = useChatStore();
 
-  const handleToggleSidebar = useCallback(() => {
-    setSidebarOpen((prev) => !prev);
-  }, []);
+  const handleToggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
+  const openSettings  = useCallback(() => setSettingsOpen(true),  []);
+  const closeSettings = useCallback(() => setSettingsOpen(false), []);
 
   return (
     <div
@@ -36,10 +45,8 @@ export default function ChatPage() {
         height: "100vh",
         overflow: "hidden",
         background: "#212121",
-        fontFamily: "inherit",
       }}
     >
-      {/* Sidebar */}
       <Sidebar
         conversations={conversations}
         activeThreadId={activeThreadId}
@@ -47,9 +54,9 @@ export default function ChatPage() {
         onNewChat={startNewChat}
         onDeleteConversation={removeConversation}
         isOpen={sidebarOpen}
+        onOpenSettings={openSettings}
       />
 
-      {/* Main content */}
       <div
         style={{
           display: "flex",
@@ -60,34 +67,46 @@ export default function ChatPage() {
           background: "#212121",
         }}
       >
-        {/* Topbar */}
         <Topbar
           sidebarOpen={sidebarOpen}
           onToggleSidebar={handleToggleSidebar}
           onNewChat={startNewChat}
           conversations={conversations}
           activeThreadId={activeThreadId}
+          onOpenSettings={openSettings}
         />
 
-        {/* Chat area (scrollable) */}
         <ChatArea
           messages={messages}
           isStreaming={isStreaming}
           loadingHistory={loadingHistory}
           onSuggestionClick={sendMessage}
           activeThreadId={activeThreadId}
+          onOpenSettings={openSettings}
         />
 
-        {/* Input bar */}
         <ChatInput
           onSend={sendMessage}
           onStop={stopStreaming}
           isStreaming={isStreaming}
           selectedModel={selectedModel}
+          selectedProvider={selectedProvider}
           onModelChange={setSelectedModel}
           activeThreadId={activeThreadId}
+          setActiveThreadId={setActiveThreadId}
+          onOpenSettings={openSettings}
         />
       </div>
+
+      <SettingsModal
+        isOpen={settingsOpen}
+        onClose={closeSettings}
+        apiKeys={apiKeys}
+        onSaveKeys={setApiKeys}
+        selectedModel={selectedModel}
+        selectedProvider={selectedProvider}
+        onSelectModelProvider={setSelectedModel}
+      />
     </div>
   );
 }

@@ -1,0 +1,207 @@
+/* ============================================================
+   index.css — Global styles for AgentChat (Vite React)
+   All keyframe animations are defined here, so components
+   only need to reference a CSS class instead of injecting
+   <style> tags inline.
+   ============================================================ */
+
+/* ── Fonts ──────────────────────────────────────────────────── */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* ── Reset ───────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: #212121;
+  color: #ececec;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #3a3a3a;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #4a4a4a;
+}
+
+/* ── Animations ──────────────────────────────────────────────── */
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0);   }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1);   }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
+
+@keyframes progressPulse {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(200%);  }
+}
+
+/* ── Animation utility classes ───────────────────────────────── */
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+.typing-cursor {
+  animation: blink 1s step-end infinite;
+}
+
+.fade-up {
+  animation: fadeUp 0.2s ease-out;
+}
+
+.pulse {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+/* ── Suggestion card hover (CSS, no JS state needed) ─────────── */
+.suggestion-card:hover {
+  background: #2a2a2a !important;
+  border-color: rgba(25, 195, 125, 0.27) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+.suggestion-card:hover .suggestion-label {
+  color: #19c37d !important;
+}
+
+/* ── Markdown / Prose ────────────────────────────────────────── */
+.prose {
+  color: #d1d1d1;
+  line-height: 1.75;
+  font-size: 14px;
+  max-width: none;
+}
+
+.prose p {
+  margin-bottom: 10px;
+}
+.prose p:last-child {
+  margin-bottom: 0;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  font-weight: 600;
+  color: #ececec;
+  margin-top: 18px;
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+.prose h1 { font-size: 20px; }
+.prose h2 { font-size: 17px; }
+.prose h3 { font-size: 15px; }
+.prose h4 { font-size: 13.5px; }
+
+.prose ul, .prose ol {
+  padding-left: 22px;
+  margin-bottom: 10px;
+}
+.prose li {
+  margin-bottom: 4px;
+}
+
+.prose code {
+  font-family: "SF Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 12.5px;
+  background: rgba(255, 255, 255, 0.08);
+  padding: 2px 5px;
+  border-radius: 4px;
+  color: #e5c07b;
+}
+
+.prose pre {
+  margin: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.prose pre code {
+  background: none;
+  padding: 0;
+  border-radius: 0;
+  color: inherit;
+}
+
+.prose blockquote {
+  border-left: 3px solid #19c37d;
+  padding-left: 14px;
+  color: #888;
+  font-style: italic;
+  margin: 12px 0;
+}
+
+.prose a {
+  color: #19c37d;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.prose th, .prose td {
+  padding: 8px 12px;
+  border: 1px solid #2b2b2b;
+  text-align: left;
+}
+.prose th {
+  background: rgba(255, 255, 255, 0.04);
+  font-weight: 600;
+  color: #ececec;
+}
+.prose tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.prose strong {
+  font-weight: 600;
+  color: #ececec;
+}
+
+.prose hr {
+  border: none;
+  border-top: 1px solid #2b2b2b;
+  margin: 14px 0;
+}

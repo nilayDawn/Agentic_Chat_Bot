@@ -1,90 +1,62 @@
-"use client";
-
 import { useRef, useCallback, useState } from "react";
-import { Send, Square, Paperclip, X, Loader2, AlertCircle, CheckCircle, ChevronDown } from "lucide-react";
-import { uploadDocument } from "@/lib/api";
+import { Send, Square, Paperclip, ChevronDown, Key } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
+import { uploadDocument } from "../lib/api";
+import { validateFile } from "../utils/fileUtils";
+import { MODELS } from "../constants/models";
+import FileCard from "./FileCard";
 
-const MODELS = [
-  { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-  { value: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-  { value: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
-  { value: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
-  { value: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-  { value: "mistral-small-latest", label: "Mistral Small" },
-  { value: "mistral-medium-latest", label: "Mistral Medium" },
-  { value: "mistral-large-latest", label: "Mistral Large" },
-];
-
-const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt", ".md", ".py", ".csv"];
-
-function FileBadge({ file, onRemove, uploadState }) {
-  const ext = "." + file.name.split(".").pop().toLowerCase();
-  const allowed = ALLOWED_EXTENSIONS.includes(ext);
-
-  const color =
-    !allowed || uploadState === "error"
-      ? { bg: "rgba(239,68,68,0.15)", border: "rgba(239,68,68,0.3)", text: "#ef4444" }
-      : uploadState === "success"
-      ? { bg: "rgba(25,195,125,0.15)", border: "rgba(25,195,125,0.3)", text: "#19c37d" }
-      : { bg: "#2a2a2a", border: "#3a3a3a", text: "#999" };
-
-  return (
-    <div
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "6px",
-        padding: "4px 10px",
-        borderRadius: "20px",
-        background: color.bg,
-        border: `1px solid ${color.border}`,
-        color: color.text,
-        fontSize: "12px",
-      }}
-    >
-      {uploadState === "uploading" ? (
-        <Loader2 size={11} style={{ animation: "spin 1s linear infinite" }} />
-      ) : uploadState === "success" ? (
-        <CheckCircle size={11} />
-      ) : !allowed || uploadState === "error" ? (
-        <AlertCircle size={11} />
-      ) : (
-        <Paperclip size={11} />
-      )}
-      <span style={{ maxWidth: "120px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {file.name}
-      </span>
-      <button
-        onClick={onRemove}
-        style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, display: "flex" }}
-      >
-        <X size={11} />
-      </button>
-    </div>
-  );
-}
-
+/**
+ * ChatInput
+ * The message input bar at the bottom of the chat.
+ * Handles text input, file attachment/upload, model selection,
+ * and the send/stop lifecycle.
+ */
 export default function ChatInput({
   onSend,
   onStop,
   isStreaming,
   selectedModel,
+  selectedProvider,
   onModelChange,
   activeThreadId,
+  setActiveThreadId,
+  onOpenSettings,
 }) {
-  const [inputText, setInputText] = useState("");
-  const [attachedFile, setAttachedFile] = useState(null);
-  const [uploadState, setUploadState] = useState("idle");
+  const [inputText,   setInputText]   = useState("");
+  const [attachedFile,setAttachedFile]= useState(null);
+  const [uploadState, setUploadState] = useState("idle"); // "idle" | "uploading" | "success" | "error"
   const [uploadError, setUploadError] = useState("");
   const textareaRef = useRef(null);
   const fileInputRef = useRef(null);
 
+  // ── Textarea auto-resize ──────────────────────────────────────────────────
   const adjustHeight = () => {
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 180) + "px";
   };
+
+  // ── Send ──────────────────────────────────────────────────────────────────
+  const handleSend = useCallback(() => {
+    const text = inputText.trim();
+    if (!text || isStreaming || uploadState === "uploading") return;
+
+    setInputText("");
+    if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+    const fileInfo =
+      uploadState === "success" && attachedFile
+        ? { name: attachedFile.name, size: attachedFile.size }
+        : null;
+
+    onSend(text, fileInfo);
+
+    setAttachedFile(null);
+    setUploadState("idle");
+    setUploadError("");
+  }, [inputText, isStreaming, uploadState, attachedFile, onSend]);
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -93,42 +65,59 @@ export default function ChatInput({
     }
   };
 
-  const handleSend = useCallback(async () => {
-    const text = inputText.trim();
-    if (!text || isStreaming) return;
+  // ── File attachment ───────────────────────────────────────────────────────
+  const handleFileChange = useCallback(
+    async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      e.target.value = "";
 
-    if (attachedFile && uploadState === "idle" && activeThreadId) {
+      setAttachedFile(file);
+      setUploadState("idle");
+      setUploadError("");
+
+      if (!validateFile(file, setUploadState, setUploadError)) return;
+
       setUploadState("uploading");
+
+      // Ensure a thread ID exists before uploading
+      let threadId = activeThreadId;
+      if (!threadId) {
+        threadId = uuidv4();
+        setActiveThreadId?.(threadId);
+      }
+
       try {
-        await uploadDocument(attachedFile, activeThreadId);
+        await uploadDocument(file, threadId);
         setUploadState("success");
-        setTimeout(() => {
-          setAttachedFile(null);
-          setUploadState("idle");
-          setUploadError("");
-        }, 2000);
+        setUploadError("");
       } catch (err) {
         setUploadState("error");
-        setUploadError(err.message || "Upload failed");
-        return;
+        setUploadError(err.message || "Ingestion failed");
       }
-    }
+    },
+    [activeThreadId, setActiveThreadId]
+  );
 
-    setInputText("");
-    if (textareaRef.current) textareaRef.current.style.height = "auto";
-    onSend(text);
-  }, [inputText, isStreaming, attachedFile, uploadState, activeThreadId, onSend]);
-
-  const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setAttachedFile(file);
+  const handleRemoveFile = useCallback(() => {
+    setAttachedFile(null);
     setUploadState("idle");
     setUploadError("");
-    e.target.value = "";
+  }, []);
+
+  // ── Model selector ────────────────────────────────────────────────────────
+  const hasModel    = MODELS.some((m) => m.value === selectedModel);
+  const selectModels = hasModel
+    ? MODELS
+    : [...MODELS, { value: selectedModel, label: `Custom (${selectedModel})`, provider: selectedProvider || "gemini" }];
+
+  const handleModelChange = (e) => {
+    const val   = e.target.value;
+    const found = selectModels.find((m) => m.value === val);
+    onModelChange(val, found?.provider ?? selectedProvider ?? "gemini");
   };
 
-  const canSend = inputText.trim().length > 0 && !isStreaming;
+  const canSend = inputText.trim().length > 0 && !isStreaming && uploadState !== "uploading";
 
   return (
     <div
@@ -139,23 +128,7 @@ export default function ChatInput({
         alignItems: "center",
       }}
     >
-      {uploadError && uploadState === "error" && (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "6px",
-            marginBottom: "8px",
-            fontSize: "12px",
-            color: "#ef4444",
-          }}
-        >
-          <AlertCircle size={12} />
-          {uploadError}
-        </div>
-      )}
-
-      {/* Main input box */}
+      {/* Input box */}
       <div
         style={{
           width: "100%",
@@ -169,20 +142,20 @@ export default function ChatInput({
           overflow: "hidden",
           transition: "border-color 0.2s",
         }}
-        onFocus={() => {}}
       >
-        {/* File badge */}
+        {/* Attached file preview */}
         {attachedFile && (
-          <div style={{ padding: "10px 14px 0" }}>
-            <FileBadge
+          <div style={{ padding: "14px 16px 0", display: "flex", gap: "10px" }}>
+            <FileCard
               file={attachedFile}
-              onRemove={() => { setAttachedFile(null); setUploadState("idle"); setUploadError(""); }}
+              onRemove={handleRemoveFile}
               uploadState={uploadState}
+              uploadError={uploadError}
             />
           </div>
         )}
 
-        {/* Textarea */}
+        {/* Text input */}
         <textarea
           ref={textareaRef}
           value={inputText}
@@ -216,27 +189,15 @@ export default function ChatInput({
             padding: "6px 10px 10px",
           }}
         >
-          {/* Left tools */}
+          {/* Left: attach + model selector + API keys */}
           <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-            {/* Attach file */}
+            {/* Attach button */}
             <button
               onClick={() => fileInputRef.current?.click()}
               title="Attach file"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "32px",
-                height: "32px",
-                borderRadius: "8px",
-                border: "none",
-                background: "transparent",
-                color: "#666",
-                cursor: "pointer",
-                transition: "background 0.15s, color 0.15s",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = "#3a3a3a"; e.currentTarget.style.color = "#aaa"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#666"; }}
+              style={toolbarBtnStyle}
+              onMouseEnter={(e) => applyHover(e, "#3a3a3a", "#aaa")}
+              onMouseLeave={(e) => applyHover(e, "transparent", "#666")}
             >
               <Paperclip size={16} />
             </button>
@@ -252,7 +213,7 @@ export default function ChatInput({
             <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
               <select
                 value={selectedModel}
-                onChange={(e) => onModelChange(e.target.value)}
+                onChange={handleModelChange}
                 style={{
                   appearance: "none",
                   background: "transparent",
@@ -269,10 +230,10 @@ export default function ChatInput({
                   fontFamily: "inherit",
                   transition: "color 0.15s",
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.color = "#aaa"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.color = "#666"; }}
+                onMouseEnter={(e) => (e.currentTarget.style.color = "#aaa")}
+                onMouseLeave={(e) => (e.currentTarget.style.color = "#666")}
               >
-                {MODELS.map((m) => (
+                {selectModels.map((m) => (
                   <option key={m.value} value={m.value} style={{ background: "#1a1a1a", color: "#ececec" }}>
                     {m.label}
                   </option>
@@ -280,37 +241,30 @@ export default function ChatInput({
               </select>
               <ChevronDown
                 size={10}
-                style={{
-                  position: "absolute",
-                  right: "2px",
-                  color: "#555",
-                  pointerEvents: "none",
-                }}
+                style={{ position: "absolute", right: "2px", color: "#555", pointerEvents: "none" }}
               />
             </div>
+
+            {/* API Keys shortcut */}
+            <button
+              onClick={onOpenSettings}
+              title="Configure API Keys"
+              style={{ ...toolbarBtnStyle, width: "28px", height: "28px", borderRadius: "6px", marginLeft: "4px" }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = "#3a3a3a"; e.currentTarget.style.color = "#a855f7"; }}
+              onMouseLeave={(e) => applyHover(e, "transparent", "#666")}
+            >
+              <Key size={13} style={{ strokeWidth: 2.2 }} />
+            </button>
           </div>
 
-          {/* Send / Stop */}
+          {/* Right: send / stop */}
           {isStreaming ? (
             <button
               onClick={onStop}
               title="Stop generating"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "32px",
-                height: "32px",
-                borderRadius: "8px",
-                border: "none",
-                background: "#ececec",
-                color: "#212121",
-                cursor: "pointer",
-                flexShrink: 0,
-                transition: "opacity 0.15s",
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.8"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+              style={sendStopBtnStyle({ active: true, enabled: true })}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.8")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
             >
               <Square size={14} fill="currentColor" />
             </button>
@@ -319,20 +273,7 @@ export default function ChatInput({
               onClick={handleSend}
               disabled={!canSend}
               title="Send message"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                width: "32px",
-                height: "32px",
-                borderRadius: "8px",
-                border: "none",
-                background: canSend ? "#ececec" : "#2a2a2a",
-                color: canSend ? "#212121" : "#444",
-                cursor: canSend ? "pointer" : "default",
-                flexShrink: 0,
-                transition: "background 0.15s, color 0.15s",
-              }}
+              style={sendStopBtnStyle({ active: false, enabled: canSend })}
             >
               <Send size={14} />
             </button>
@@ -340,12 +281,47 @@ export default function ChatInput({
         </div>
       </div>
 
-      {/* Disclaimer */}
       <p style={{ marginTop: "10px", fontSize: "11.5px", color: "#3a3a3a", textAlign: "center" }}>
         AgentChat can make mistakes. Verify important information.
       </p>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
+}
+
+// ─── Style helpers ────────────────────────────────────────────────────────────
+
+const toolbarBtnStyle = {
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  width: "32px",
+  height: "32px",
+  borderRadius: "8px",
+  border: "none",
+  background: "transparent",
+  color: "#666",
+  cursor: "pointer",
+  transition: "background 0.15s, color 0.15s",
+};
+
+function applyHover(e, bg, color) {
+  e.currentTarget.style.background = bg;
+  e.currentTarget.style.color = color;
+}
+
+function sendStopBtnStyle({ active, enabled }) {
+  return {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "32px",
+    height: "32px",
+    borderRadius: "8px",
+    border: "none",
+    background: active ? "#ececec" : enabled ? "#ececec" : "#2a2a2a",
+    color: active ? "#212121" : enabled ? "#212121" : "#444",
+    cursor: active || enabled ? "pointer" : "default",
+    flexShrink: 0,
+    transition: "background 0.15s, color 0.15s, opacity 0.15s",
+  };
 }

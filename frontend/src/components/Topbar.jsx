@@ -1,6 +1,38 @@
-"use client";
+import { PanelLeft, Plus, Settings } from "lucide-react";
 
-import { PanelLeft, Plus } from "lucide-react";
+/** Reusable icon-button used multiple times in the Topbar. */
+function IconButton({ onClick, title, children }) {
+  return (
+    <button
+      onClick={onClick}
+      title={title}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        width: "36px",
+        height: "36px",
+        borderRadius: "8px",
+        border: "none",
+        background: "transparent",
+        color: "#888",
+        cursor: "pointer",
+        flexShrink: 0,
+        transition: "background 0.15s, color 0.15s",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = "#2a2a2a";
+        e.currentTarget.style.color = "#fff";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = "transparent";
+        e.currentTarget.style.color = "#888";
+      }}
+    >
+      {children}
+    </button>
+  );
+}
 
 export default function Topbar({
   sidebarOpen,
@@ -8,6 +40,7 @@ export default function Topbar({
   onNewChat,
   conversations,
   activeThreadId,
+  onOpenSettings,
 }) {
   const activeConv = conversations.find((c) => c.thread_id === activeThreadId);
   const title =
@@ -30,81 +63,36 @@ export default function Topbar({
         flexShrink: 0,
       }}
     >
-      {/* Sidebar toggle */}
-      <button
+      <IconButton
         onClick={onToggleSidebar}
         title={sidebarOpen ? "Close sidebar" : "Open sidebar"}
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          width: "36px",
-          height: "36px",
-          borderRadius: "8px",
-          border: "none",
-          background: "transparent",
-          color: "#888",
-          cursor: "pointer",
-          flexShrink: 0,
-          transition: "background 0.15s, color 0.15s",
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = "#2a2a2a";
-          e.currentTarget.style.color = "#fff";
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = "transparent";
-          e.currentTarget.style.color = "#888";
-        }}
       >
         <PanelLeft size={18} />
-      </button>
+      </IconButton>
 
-      {/* New chat (only when sidebar is hidden) */}
+      {/* Show New-Chat button only when sidebar is hidden */}
       {!sidebarOpen && (
-        <button
-          onClick={onNewChat}
-          title="New chat"
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            width: "36px",
-            height: "36px",
-            borderRadius: "8px",
-            border: "none",
-            background: "transparent",
-            color: "#888",
-            cursor: "pointer",
-            flexShrink: 0,
-            transition: "background 0.15s, color 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "#2a2a2a";
-            e.currentTarget.style.color = "#fff";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = "#888";
-          }}
-        >
+        <IconButton onClick={onNewChat} title="New chat">
           <Plus size={18} />
-        </button>
+        </IconButton>
       )}
 
-      {/* Title */}
       <span
         style={{
+          flex: 1,
           fontSize: "14px",
           color: "#888",
           overflow: "hidden",
           textOverflow: "ellipsis",
           whiteSpace: "nowrap",
-          flex: 1,
         }}
       >
         {title}
       </span>
+
+      <IconButton onClick={onOpenSettings} title="Settings">
+        <Settings size={18} />
+      </IconButton>
     </header>
   );
 }

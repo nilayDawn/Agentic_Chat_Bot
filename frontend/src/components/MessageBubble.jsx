@@ -1,11 +1,13 @@
-"use client";
-
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Copy, Check, AlertCircle } from "lucide-react";
+import AttachmentCard from "./AttachmentCard";
+import ToolCallsDisplay from "./ToolCallsDisplay";
+
+// ─── CodeBlock ────────────────────────────────────────────────────────────────
 
 function CodeBlock({ language, children }) {
   const [copied, setCopied] = useState(false);
@@ -26,6 +28,7 @@ function CodeBlock({ language, children }) {
         fontSize: "13px",
       }}
     >
+      {/* Code block header */}
       <div
         style={{
           display: "flex",
@@ -57,6 +60,7 @@ function CodeBlock({ language, children }) {
           {copied ? "Copied!" : "Copy"}
         </button>
       </div>
+
       <SyntaxHighlighter
         style={oneDark}
         language={language || "text"}
@@ -77,12 +81,15 @@ function CodeBlock({ language, children }) {
   );
 }
 
+// ─── MarkdownContent ──────────────────────────────────────────────────────────
+
 function MarkdownContent({ content }) {
   return (
     <div className="prose">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
+          // Render fenced code blocks with syntax highlighting
           code({ node, inline, className, children, ...props }) {
             const match = /language-(\w+)/.exec(className || "");
             return !inline ? (
@@ -93,6 +100,7 @@ function MarkdownContent({ content }) {
               </code>
             );
           },
+          // Strip redundant <pre> wrappers — CodeBlock renders its own container
           pre({ children }) {
             return <>{children}</>;
           },
@@ -104,28 +112,26 @@ function MarkdownContent({ content }) {
   );
 }
 
+// ─── TypingCursor ─────────────────────────────────────────────────────────────
+
 function TypingCursor() {
   return (
-    <>
-      <span
-        style={{
-          display: "inline-block",
-          width: "2px",
-          height: "16px",
-          marginLeft: "2px",
-          background: "#ececec",
-          verticalAlign: "middle",
-          borderRadius: "1px",
-        }}
-        className="typing-cursor"
-      />
-      <style>{`
-        .typing-cursor { animation: blink 1s step-end infinite; }
-        @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
-      `}</style>
-    </>
+    <span
+      className="typing-cursor"
+      style={{
+        display: "inline-block",
+        width: "2px",
+        height: "16px",
+        marginLeft: "2px",
+        background: "#ececec",
+        verticalAlign: "middle",
+        borderRadius: "1px",
+      }}
+    />
   );
 }
+
+// ─── Avatars ──────────────────────────────────────────────────────────────────
 
 function UserAvatar() {
   return (
@@ -166,15 +172,28 @@ function BotAvatar() {
       }}
     >
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none">
-        <path d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26C17.81 13.47 19 11.38 19 9c0-3.87-3.13-7-7-7z" fill="white" opacity="0.9" />
+        <path
+          d="M12 2C8.13 2 5 5.13 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26C17.81 13.47 19 11.38 19 9c0-3.87-3.13-7-7-7z"
+          fill="white"
+          opacity="0.9"
+        />
       </svg>
     </div>
   );
 }
 
+// ─── MessageBubble ────────────────────────────────────────────────────────────
+
+/**
+ * Renders a single user or assistant message with avatars, markdown,
+ * tool-call indicators, error styling, and a copy button.
+ */
 export default function MessageBubble({ message, isStreaming }) {
-  const [copied, setCopied] = useState(false);
+  const [copied,  setCopied]  = useState(false);
   const [hovered, setHovered] = useState(false);
+
+  const isUser  = message.role === "user";
+  const isEmpty = !isUser && !message.content && isStreaming;
 
   const handleCopy = () => {
     navigator.clipboard.writeText(message.content);
@@ -182,18 +201,15 @@ export default function MessageBubble({ message, isStreaming }) {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const isUser = message.role === "user";
-  const isEmpty = !isUser && !message.content && isStreaming;
-
   return (
     <div
+      className="fade-up"
       style={{
         display: "flex",
         alignItems: "flex-start",
         gap: "14px",
         padding: "18px 24px",
         justifyContent: isUser ? "flex-end" : "flex-start",
-        animation: "fadeUp 0.2s ease-out",
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
@@ -209,6 +225,7 @@ export default function MessageBubble({ message, isStreaming }) {
         }}
       >
         {isUser ? (
+          /* User bubble */
           <div
             style={{
               background: "#2f2f2f",
@@ -219,11 +236,21 @@ export default function MessageBubble({ message, isStreaming }) {
               fontSize: "14px",
               color: "#ececec",
               lineHeight: "1.6",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
             }}
           >
-            {message.content}
+            {message.fileName && (
+              <AttachmentCard
+                fileName={message.fileName}
+                fileSize={message.fileSize}
+              />
+            )}
+            <div>{message.content}</div>
           </div>
         ) : (
+          /* Assistant bubble */
           <div>
             {message.isError ? (
               <div
@@ -242,25 +269,28 @@ export default function MessageBubble({ message, isStreaming }) {
                 <AlertCircle size={15} style={{ flexShrink: 0, marginTop: "1px" }} />
                 {message.content}
               </div>
-            ) : isEmpty ? (
+            ) : isEmpty && !message.toolCalls?.length ? (
+              /* Thinking indicator */
               <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#555" }}>
                 <span
+                  className="pulse"
                   style={{
                     width: "8px",
                     height: "8px",
                     borderRadius: "50%",
                     background: "#19c37d",
-                    animation: "pulse 1.4s ease-in-out infinite",
+                    display: "inline-block",
                   }}
                 />
                 <span style={{ fontSize: "13px" }}>Thinking…</span>
               </div>
             ) : (
               <div>
-                <MarkdownContent content={message.content} />
+                <ToolCallsDisplay toolCalls={message.toolCalls} />
+                {message.content && <MarkdownContent content={message.content} />}
                 {isStreaming && <TypingCursor />}
 
-                {/* Copy button */}
+                {/* Copy button (visible on hover after streaming ends) */}
                 {!isStreaming && message.content && hovered && (
                   <button
                     onClick={handleCopy}
@@ -278,8 +308,14 @@ export default function MessageBubble({ message, isStreaming }) {
                       borderRadius: "6px",
                       transition: "color 0.15s, background 0.15s",
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = "#2a2a2a"; if (!copied) e.currentTarget.style.color = "#aaa"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = "none"; if (!copied) e.currentTarget.style.color = "#555"; }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "#2a2a2a";
+                      if (!copied) e.currentTarget.style.color = "#aaa";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "none";
+                      if (!copied) e.currentTarget.style.color = "#555";
+                    }}
                   >
                     {copied ? <Check size={11} /> : <Copy size={11} />}
                     {copied ? "Copied!" : "Copy"}
@@ -292,11 +328,6 @@ export default function MessageBubble({ message, isStreaming }) {
       </div>
 
       {isUser && <UserAvatar />}
-
-      <style>{`
-        @keyframes fadeUp { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
-      `}</style>
     </div>
   );
 }
