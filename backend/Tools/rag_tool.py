@@ -64,25 +64,51 @@ def ingest_document(file_path: str, thread_id: str):
     )
     db.add_documents(docs)
 
-def get_retriever(query: str, k: int = 4, thread_id: str | None = None):
-    thread_id = thread_id or _memory_state.CURRENT_THREAD_ID
+def retrieve_hybrid_documents(query: str, thread_id: str, k: int = 4) -> list:
+    """
+    Perform a hybrid search combining dense semantic similarity and sparse keyword search (BM25)
+    over documents matching the given thread_id.
+    """
     db_path = 'database/chroma_db'
     if not os.path.exists(db_path):
-        raise FileNotFoundError("Chroma database not found. Please ingest documents first.")
+        raise FileNotFoundError("Chroma database not found.")
     
     db = Chroma(
         persist_directory=db_path,
         embedding_function=embeddings,
         collection_name="rag_documents"
     )
-    retriever = db.as_retriever(
-        search_type="similarity",
-        search_kwargs={
-            "k": k,
-            "filter": {"thread_id": thread_id}
-        }
-    )
-    return retriever
+
+    # 1. Fetch dense semantic results
+    semantic_results = db.similarity_search(query, k=k, filter={"thread_id": thread_id})
+
+    # 2. Fetch sparse keyword results by fetching all docs in thread and applying BM25
+    keyword_results = []
+    try:
+        all_data = db.get(where={"thread_id": thread_id})
+        if all_data and all_data.get("documents"):
+            all_docs = [
+                Document(page_content=doc, metadata=meta)
+                for doc, meta in zip(all_data["documents"], all_data["metadatas"])
+            ]
+            from langchain_community.retrievers import BM25Retriever
+            bm25 = BM25Retriever.from_documents(all_docs)
+            bm25.k = min(k, len(all_docs))
+            keyword_results = bm25.invoke(query)
+    except Exception as e:
+        # Fallback if BM25 index initialization fails
+        pass
+
+    # Combine and de-duplicate preserving order
+    seen = set()
+    combined_docs = []
+    for doc in semantic_results + keyword_results:
+        content_id = doc.page_content.strip()
+        if content_id not in seen:
+            seen.add(content_id)
+            combined_docs.append(doc)
+
+    return combined_docs[:k]
 
 
 from langchain_core.runnables import RunnableConfig
@@ -104,8 +130,7 @@ def rag_tool(query: str, config: RunnableConfig) -> str:
             thread_id = config.get("configurable", {}).get("thread_id")
         if not thread_id:
             thread_id = _memory_state.CURRENT_THREAD_ID
-        retriever = get_retriever(query, thread_id=thread_id)
-        docs = retriever.invoke(query)
+        docs = retrieve_hybrid_documents(query, thread_id=thread_id)
     except FileNotFoundError:
         return "No documents have been uploaded yet. Please upload documents before querying."
 

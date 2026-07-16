@@ -4,7 +4,7 @@ import uuid
 import json
 
 import uvicorn
-from fastapi import FastAPI, Request, UploadFile, File, Form, Depends
+from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -93,6 +93,7 @@ async def delete_conversation_endpoint(thread_id: str, current_user: dict = Depe
 
 @app.post("/upload")
 async def upload_document(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     thread_id: str = Form(...),
     current_user: dict = Depends(get_current_user)
@@ -122,14 +123,12 @@ async def upload_document(
 
         create_or_update_conversation(thread_id, user_id, "Uploaded document")
 
-        result = ingest_document(
-            file_path=file_path,
-            thread_id=thread_id
-        )
+        # Run ingest_document asynchronously
+        background_tasks.add_task(ingest_document, file_path, thread_id)
 
         return JSONResponse({
             "success": True,
-            "message": f"Uploaded {result.get('filename', filename)} and created {result.get('chunks', 0)} chunks." if result else f"Uploaded {filename}."
+            "message": f"Uploaded {filename} successfully. Processing started in the background."
         })
 
     except Exception as e:
