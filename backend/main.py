@@ -39,7 +39,6 @@ app.add_middleware(
 
 
 
-Path('uploads').mkdir(parents=True, exist_ok=True)
 Path('Data').mkdir(parents=True, exist_ok=True)
 
 init_db()  # Initialize the database when the application starts
@@ -114,17 +113,13 @@ async def upload_document(
                 status_code=400
             )
 
-        file_id = str(uuid.uuid4())
-        safe_filename = Path(filename).name.replace(" ", "_")
-        file_path = f"uploads/{file_id}_{safe_filename}"
-
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
+        # Read file bytes in memory
+        file_bytes = await file.read()
 
         create_or_update_conversation(thread_id, user_id, "Uploaded document")
 
-        # Run ingest_document asynchronously
-        background_tasks.add_task(ingest_document, file_path, thread_id)
+        # Run ingest_document asynchronously entirely in-memory
+        background_tasks.add_task(ingest_document, file_bytes, filename, thread_id)
 
         return JSONResponse({
             "success": True,
