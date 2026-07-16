@@ -38,7 +38,7 @@ def check_safety(user_text: str, provider: str, api_key: str | None) -> bool:
             SystemMessage(content=system_prompt),
             HumanMessage(content=f"User query to evaluate:\n\n{user_text}")
         ]
-        res = safety_llm.invoke(messages)
+        res = safety_llm.invoke(messages, config={"callbacks": []})
         verdict = str(res.content).strip().upper()
         return "UNSAFE" not in verdict
     except Exception as e:
