@@ -13,8 +13,10 @@ A state-of-the-art, feature-rich conversational assistant application built usin
 
 ### 2. ⚡ Advanced RAG (Retrieval-Augmented Generation)
 *   **In-Memory Stream Processing**: Uploaded documents are parsed entirely in-memory (using `io.BytesIO`). Files are never written to the local disk, keeping the server completely stateless.
-*   **Hybrid Search (Dense + Sparse)**: Combines semantic vector search (ChromaDB + Gemini Embeddings) with keyword search (BM25) to retrieve context with high conceptual and textual accuracy.
+*   **Pinecone Vector DB with Chroma Fallback**: Vector embeddings are saved to a managed cloud database (**Pinecone**) in production, with automatic fallback to a local **ChromaDB** container if no Pinecone keys are specified.
+*   **Hybrid Search (Dense + Sparse)**: In Chroma fallback mode, combines semantic vector search (Gemini Embeddings) with local keyword search (BM25) to retrieve context with high conceptual and textual accuracy.
 *   **Asynchronous Ingestion**: Ingests files using FastAPI's background workers so the user interface remains responsive during processing.
+*   **Ingestion Status Tracking**: Backed by a PostgreSQL `user_documents` status table. The frontend polls and displays real-time ingestion status (`processing`, `ready`, or `failed` with error logs) directly on the file card.
 *   **Supported Formats**: `.pdf`, `.docx`, `.txt`, `.md`, `.py`, `.csv`.
 
 ### 3. 🔍 Real-Time Tool Execution Transparency
@@ -36,6 +38,10 @@ A state-of-the-art, feature-rich conversational assistant application built usin
 ### 6. 🎨 Premium Glassmorphism UI
 *   Designed using a dark neon aesthetic featuring backdrop filters, sleek sidebars, and premium visual hierarchy.
 *   Built-in BYOK (Bring Your Own Key) manager to override default Gemini, OpenAI, Mistral, or Groq API keys directly from the settings drawer.
+
+### 7. 🚦 API Rate Limiting & Abuse Prevention
+*   Endpoints are protected with `slowapi` rate limiters to prevent bot abuse and control external API costs.
+*   Chat streaming is limited to **30 requests/minute**, file uploads to **10 uploads/minute**, and document checking to **60 requests/minute**.
 
 ---
 
@@ -79,6 +85,10 @@ graph TD
     TAVILY_API_KEY=your_tavily_key
     OPENWEATHER_API_KEY=your_openweather_key
     ALPHAVANTAGE_API_KEY=your_alphavantage_key
+
+    # Optional Production Managed Vector DB (Pinecone)
+    PINECONE_API_KEY=your_pinecone_key
+    PINECONE_INDEX_NAME=your_pinecone_index
     ```
 3.  Launch the FastAPI server:
     ```bash
