@@ -4,7 +4,7 @@ import uuid
 import json
 
 import uvicorn
-from fastapi import FastAPI, Request, UploadFile, File, Form
+from fastapi import FastAPI, Request, UploadFile, File, Form, Depends
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -14,6 +14,7 @@ from Agent.chatbot import get_agent
 from Memory.database import init_db,save_chat_message,get_chat_history,create_or_update_conversation,list_conversations,delete_conversation
 from Tools.rag_tool import ingest_document
 from Tools.memory_toos import set_current_thread_id
+from Utils.auth import get_current_user
 
 app = FastAPI(
     title="Agentic Chat Bot Backend",
@@ -48,8 +49,9 @@ async def health():
     return {"status": "healthy", "message": "This is the backend for the Agentic Chat Bot. The API is up and running."}
 
 @app.get("/conversations")
-async def conversations():
-    items = list_conversations()
+async def conversations(current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    items = list_conversations(user_id)
 
     return {
         "conversations": [
@@ -63,8 +65,9 @@ async def conversations():
         ]
     }
 @app.get("/history/{thread_id}")
-async def history(thread_id: str):
-    messages = get_chat_history(thread_id)
+async def history(thread_id: str, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    messages = get_chat_history(thread_id, user_id)
 
     return {
         "messages": [
@@ -80,9 +83,10 @@ async def history(thread_id: str):
     }
 
 @app.delete("/conversations/{thread_id}")
-async def delete_conversation_endpoint(thread_id: str):
+async def delete_conversation_endpoint(thread_id: str, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
     try:
-        delete_conversation(thread_id)
+        delete_conversation(thread_id, user_id)
         return {"success": True, "message": f"Conversation {thread_id} deleted."}
     except Exception as e:
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
@@ -90,8 +94,10 @@ async def delete_conversation_endpoint(thread_id: str):
 @app.post("/upload")
 async def upload_document(
     file: UploadFile = File(...),
-    thread_id: str = Form(...)
+    thread_id: str = Form(...),
+    current_user: dict = Depends(get_current_user)
 ):
+    user_id = current_user["id"]
     try:
         allowed_extensions = [".pdf", ".docx", ".txt", ".md", ".py", ".csv"]
 
@@ -114,7 +120,7 @@ async def upload_document(
         with open(file_path, "wb") as f:
             f.write(await file.read())
 
-        create_or_update_conversation(thread_id, "Uploaded document")
+        create_or_update_conversation(thread_id, user_id, "Uploaded document")
 
         result = ingest_document(
             file_path=file_path,
@@ -139,7 +145,8 @@ async def upload_document(
 from Utils.helpers import sse_data, should_stream_chunk, extract_text_from_chunk
 
 @app.post("/chat/stream")
-async def chat_stream(request: Request):
+async def chat_stream(request: Request, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
     try:
         data = await request.json()
     except Exception:
@@ -164,8 +171,8 @@ async def chat_stream(request: Request):
 
     agent = get_agent(selected_model)
 
-    create_or_update_conversation(thread_id, user_message)
-    save_chat_message(thread_id, "user", user_message, file_name=file_name, file_size=file_size)
+    create_or_update_conversation(thread_id, user_id, user_message)
+    save_chat_message(thread_id, user_id, "user", user_message, file_name=file_name, file_size=file_size)
 
     set_current_thread_id(thread_id)
 
@@ -246,7 +253,7 @@ async def chat_stream(request: Request):
                 tool_calls_json = json.dumps(list(tool_calls_data.values()))
 
             if final_answer.strip():
-                save_chat_message(thread_id, "assistant", final_answer, tool_calls=tool_calls_json)
+                save_chat_message(thread_id, user_id, "assistant", final_answer, tool_calls=tool_calls_json)
 
             yield sse_data({"done": True})
 
@@ -265,4 +272,4 @@ async def chat_stream(request: Request):
     )
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000,reload=True, log_level="info")
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True, log_level="info")

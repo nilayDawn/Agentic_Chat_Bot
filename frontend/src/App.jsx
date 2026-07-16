@@ -1,18 +1,21 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import ChatArea from "./components/ChatArea";
 import ChatInput from "./components/ChatInput";
 import SettingsModal from "./components/SettingsModal";
+import Auth from "./components/Auth";
+import { supabase } from "./lib/supabaseClient";
 import { useChatStore } from "./hooks/useChatStore";
 
 /**
  * App — root component.
- * Owns sidebar-open / settings-open UI state and wires
- * all sub-components to the shared useChatStore hook.
+ * Handles Supabase session state and wires all sub-components.
  */
 export default function App() {
-  const [sidebarOpen,  setSidebarOpen]  = useState(true);
+  const [session, setSession] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const {
@@ -26,6 +29,7 @@ export default function App() {
     loadingHistory,
     setSelectedModel,
     setApiKeys,
+    loadConversations,
     selectConversation,
     startNewChat,
     sendMessage,
@@ -34,9 +38,59 @@ export default function App() {
     setActiveThreadId,
   } = useChatStore();
 
+  useEffect(() => {
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setAuthLoading(false);
+    });
+
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Reload conversations when a user logs in
+  useEffect(() => {
+    if (session) {
+      loadConversations();
+    }
+  }, [session, loadConversations]);
+
   const handleToggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
   const openSettings  = useCallback(() => setSettingsOpen(true),  []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
+  const handleLogOut  = useCallback(() => supabase.auth.signOut(), []);
+
+  if (authLoading) {
+    return (
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: "100vw",
+          height: "100vh",
+          background: "#171717",
+          color: "#888",
+          fontSize: "14px",
+          fontFamily: "'Inter', sans-serif",
+        }}
+      >
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px" }}>
+          <div className="spinner" style={{ width: "24px", height: "24px", border: "2px solid #333", borderTopColor: "#8b5cf6", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+          <span>Authenticating Session...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Auth />;
+  }
 
   return (
     <div
@@ -55,6 +109,8 @@ export default function App() {
         onDeleteConversation={removeConversation}
         isOpen={sidebarOpen}
         onOpenSettings={openSettings}
+        userEmail={session.user?.email}
+        onLogOut={handleLogOut}
       />
 
       <div

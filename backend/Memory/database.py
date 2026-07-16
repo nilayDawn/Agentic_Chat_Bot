@@ -23,6 +23,7 @@ class Conversation(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     thread_id = Column(String, unique=True, index=True)
+    user_id = Column(String, index=True, nullable=True)
     title = Column(String, default="New Chat")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow)
@@ -54,10 +55,10 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 
 
-#----Utility Funcitons----
-def create_or_update_conversation(thread_id:str, first_message:str | None = None):
+#----Utility Functions----
+def create_or_update_conversation(thread_id: str, user_id: str, first_message: str | None = None):
     """
-    Create a new conversation or update an existing one based on the thread_id.
+    Create a new conversation or update an existing one based on the thread_id and user_id.
     If first_message is provided, it will be added to the chat_messages table.
     """
     db = SessionLocal()
@@ -68,11 +69,12 @@ def create_or_update_conversation(thread_id:str, first_message:str | None = None
             title = "New Chat"
             if first_message:
                 title = first_message.strip()[:40]  # Use the first 40 characters of the first message as title
-                if  len(first_message) > 40:
+                if len(first_message) > 40:
                     title += "..."
 
             conversation = Conversation(
                 thread_id=thread_id,
+                user_id=user_id,
                 title=title,
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
@@ -80,46 +82,66 @@ def create_or_update_conversation(thread_id:str, first_message:str | None = None
             db.add(conversation)
         else:
             conversation.updated_at = datetime.utcnow()
+            if not conversation.user_id:
+                conversation.user_id = user_id
 
         db.commit()
     finally:
         db.close()
 
-def list_conversations():
-    """ List all conversations in the database """
+def list_conversations(user_id: str):
+    """ List all conversations belonging to the user_id in the database """
     db = SessionLocal()
 
     try:
         return (
             db.query(Conversation)
+            .filter(Conversation.user_id == user_id)
             .order_by(Conversation.updated_at.desc())
             .all()
         )
 
     finally:
         db.close()
-def delete_conversation(thread_id: str):
-    """ Delete a conversation and its associated chat messages and long-term memories based on the thread_id. """
+
+def delete_conversation(thread_id: str, user_id: str):
+    """ Delete a conversation belonging to user_id and its associated chat messages and memories. """
     db = SessionLocal()
 
     try:
-        # Delete chat messages associated with the thread_id
-        db.query(ChatMessage).filter(ChatMessage.thread_id == thread_id).delete()
+        # Check ownership first
+        conversation = db.query(Conversation).filter(Conversation.thread_id == thread_id, Conversation.user_id == user_id).first()
+        if conversation:
+            # Delete chat messages associated with the thread_id
+            db.query(ChatMessage).filter(ChatMessage.thread_id == thread_id).delete()
 
-        # Delete long-term memories associated with the thread_id
-        db.query(LongTermMemory).filter(LongTermMemory.thread_id == thread_id).delete()
+            # Delete long-term memories associated with the thread_id
+            db.query(LongTermMemory).filter(LongTermMemory.thread_id == thread_id).delete()
 
-        # Delete the conversation itself
-        db.query(Conversation).filter(Conversation.thread_id == thread_id).delete()
-
-        db.commit()
+            # Delete the conversation itself
+            db.delete(conversation)
+            db.commit()
     finally:
         db.close()
-def save_chat_message(thread_id: str, role: str, content: str, file_name: str | None = None, file_size: int | None = None, tool_calls: str | None = None):
-    """ Save a chat message to the database under the specified thread_id."""
+
+def save_chat_message(thread_id: str, user_id: str, role: str, content: str, file_name: str | None = None, file_size: int | None = None, tool_calls: str | None = None):
+    """ Save a chat message to the database, ensuring ownership validation. """
     db = SessionLocal()
 
     try:
+        conversation = db.query(Conversation).filter(Conversation.thread_id == thread_id).first()
+        if not conversation:
+            conversation = Conversation(
+                thread_id=thread_id,
+                user_id=user_id,
+                title=content.strip()[:40] + ("..." if len(content) > 40 else ""),
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow()
+            )
+            db.add(conversation)
+        elif conversation.user_id != user_id:
+            raise ValueError("Unauthorized access to thread")
+
         msg = ChatMessage(
             thread_id=thread_id,
             role=role,
@@ -131,24 +153,21 @@ def save_chat_message(thread_id: str, role: str, content: str, file_name: str | 
         )
 
         db.add(msg)
-
-        conversation = (
-            db.query(Conversation)
-            .filter(Conversation.thread_id == thread_id)
-            .first()
-        )
-
-        if conversation:
-            conversation.updated_at = datetime.utcnow()
-
+        conversation.updated_at = datetime.utcnow()
         db.commit()
 
     finally:
         db.close()
-def get_chat_history(thread_id: str):
+
+def get_chat_history(thread_id: str, user_id: str):
+    """ Get chat history for a thread, verifying ownership first """
     db = SessionLocal()
 
     try:
+        conversation = db.query(Conversation).filter(Conversation.thread_id == thread_id, Conversation.user_id == user_id).first()
+        if not conversation:
+            return []
+
         return (
             db.query(ChatMessage)
             .filter(ChatMessage.thread_id == thread_id)

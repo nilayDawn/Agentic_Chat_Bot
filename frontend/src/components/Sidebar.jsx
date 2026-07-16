@@ -149,6 +149,8 @@ export default function Sidebar({
   onDeleteConversation,
   isOpen,
   onOpenSettings,
+  userEmail,
+  onLogOut,
 }) {
   const groups = groupConversationsByDate(conversations);
 
@@ -247,39 +249,69 @@ export default function Sidebar({
           borderTop: "1px solid #2b2b2b",
           flexShrink: 0,
           display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
+          flexDirection: "column",
+          gap: "8px",
         }}
       >
-        <p style={{ margin: 0, fontSize: "11px", color: "#3a3a3a" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontSize: "11.5px", color: "#666", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: "150px" }} title={userEmail}>
+            {userEmail || "user@example.com"}
+          </span>
+          <div style={{ display: "flex", gap: "6px" }}>
+            <button
+              onClick={onOpenSettings}
+              title="Settings"
+              style={{
+                padding: "4px",
+                borderRadius: "6px",
+                border: "none",
+                background: "transparent",
+                color: "#888",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "color 0.15s, background 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "#fff";
+                e.currentTarget.style.background = "#2a2a2a";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "#888";
+                e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <Settings size={13} />
+            </button>
+            <button
+              onClick={onLogOut}
+              style={{
+                fontSize: "11px",
+                color: "#888",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                padding: "2px 6px",
+                borderRadius: "4px",
+                transition: "color 0.15s, background 0.15s",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.color = "#ef4444";
+                e.currentTarget.style.background = "rgba(239, 68, 68, 0.1)";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.color = "#888";
+                e.currentTarget.style.background = "none";
+              }}
+            >
+              Log Out
+            </button>
+          </div>
+        </div>
+        <p style={{ margin: 0, fontSize: "10px", color: "#3a3a3a", textAlign: "center" }}>
           Agentic Chat Bot v1.0
         </p>
-        <button
-          onClick={onOpenSettings}
-          title="Settings"
-          style={{
-            padding: "4px",
-            borderRadius: "6px",
-            border: "none",
-            background: "transparent",
-            color: "#888",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            transition: "color 0.15s, background 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.color = "#fff";
-            e.currentTarget.style.background = "#2a2a2a";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.color = "#888";
-            e.currentTarget.style.background = "transparent";
-          }}
-        >
-          <Settings size={13} />
-        </button>
       </div>
     </aside>
   );

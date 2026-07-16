@@ -1,12 +1,16 @@
-/**
- * lib/api.js
- * All HTTP / SSE communication with the FastAPI backend.
- *
- * Base URL is configured via the VITE_API_URL environment variable.
- * Falls back to http://localhost:8000 for local development.
- */
+import { supabase } from "./supabaseClient";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+// Helper to get active session JWT token for authorization header
+async function getAuthHeaders() {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers = {};
+  if (session?.access_token) {
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
+  return headers;
+}
 
 // ─── REST helpers ─────────────────────────────────────────────────────────────
 
@@ -15,7 +19,8 @@ const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
  * @returns {Promise<Array>} List of conversation objects
  */
 export async function fetchConversations() {
-  const res = await fetch(`${BASE_URL}/conversations`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/conversations`, { headers });
   if (!res.ok) throw new Error("Failed to fetch conversations");
   const data = await res.json();
   return data.conversations;
@@ -27,7 +32,8 @@ export async function fetchConversations() {
  * @returns {Promise<Array>} List of message objects { role, content, ... }
  */
 export async function fetchHistory(threadId) {
-  const res = await fetch(`${BASE_URL}/history/${threadId}`);
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/history/${threadId}`, { headers });
   if (!res.ok) throw new Error("Failed to fetch chat history");
   const data = await res.json();
   return data.messages;
@@ -39,8 +45,10 @@ export async function fetchHistory(threadId) {
  * @returns {Promise<void>}
  */
 export async function deleteConversation(threadId) {
+  const headers = await getAuthHeaders();
   const res = await fetch(`${BASE_URL}/conversations/${threadId}`, {
     method: "DELETE",
+    headers,
   });
   if (!res.ok) throw new Error("Failed to delete conversation");
 }
@@ -52,12 +60,14 @@ export async function deleteConversation(threadId) {
  * @returns {Promise<{ success: boolean, message: string }>}
  */
 export async function uploadDocument(file, threadId) {
+  const headers = await getAuthHeaders();
   const formData = new FormData();
   formData.append("file", file);
   formData.append("thread_id", threadId);
 
   const res = await fetch(`${BASE_URL}/upload`, {
     method: "POST",
+    headers,
     body: formData,
   });
 
@@ -100,20 +110,26 @@ export function streamChat({
 }) {
   const controller = new AbortController();
 
-  fetch(`${BASE_URL}/chat/stream`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      message,
-      thread_id: threadId,
-      model,
-      provider,
-      api_keys: apiKeys,
-      file_name: fileName,
-      file_size: fileSize,
-    }),
-    signal: controller.signal,
-  })
+  getAuthHeaders()
+    .then((authHeaders) => {
+      return fetch(`${BASE_URL}/chat/stream`, {
+        method: "POST",
+        headers: { 
+          "Content-Type": "application/json",
+          ...authHeaders
+        },
+        body: JSON.stringify({
+          message,
+          thread_id: threadId,
+          model,
+          provider,
+          api_keys: apiKeys,
+          file_name: fileName,
+          file_size: fileSize,
+        }),
+        signal: controller.signal,
+      });
+    })
     .then(async (res) => {
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
