@@ -1,15 +1,17 @@
 from datetime import datetime
-from pathlib import Path
+import os
+from dotenv import load_dotenv
 
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 
-Path("Data").mkdir(parents=True, exist_ok=True)
+load_dotenv()
 
-DATABASE_URL = "sqlite:///Data/agent_memory.db"
-engine = create_engine(
-    DATABASE_URL, connect_args={"check_same_thread": False}
-)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set")
+
+engine = create_engine(DATABASE_URL)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -50,26 +52,6 @@ class LongTermMemory(Base):
 
 def init_db():
     Base.metadata.create_all(bind=engine)
-    # Automatically migrate existing databases to include file_name and file_size columns
-    import sqlite3
-    db_path = "Data/agent_memory.db"
-    if Path(db_path).exists():
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
-        try:
-            cursor.execute("PRAGMA table_info(chat_messages);")
-            columns = [row[1] for row in cursor.fetchall()]
-            if "file_name" not in columns:
-                cursor.execute("ALTER TABLE chat_messages ADD COLUMN file_name VARCHAR;")
-            if "file_size" not in columns:
-                cursor.execute("ALTER TABLE chat_messages ADD COLUMN file_size INTEGER;")
-            if "tool_calls" not in columns:
-                cursor.execute("ALTER TABLE chat_messages ADD COLUMN tool_calls TEXT;")
-            conn.commit()
-        except Exception as e:
-            print("Database migration warning:", e)
-        finally:
-            conn.close()
 
 
 #----Utility Funcitons----

@@ -2,21 +2,7 @@ import os
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.graph import MessagesState, END
 from langchain_core.runnables import RunnableConfig
-
-def guess_provider(model_name: str) -> str:
-    """
-    Determine the model provider based on the model name.
-    """
-    model_lower = model_name.lower()
-    if "gemini" in model_lower:
-        return "gemini"
-    elif "mistral" in model_lower:
-        return "mistral"
-    elif "gpt-" in model_lower or "o1-" in model_lower or "o3-" in model_lower or "openai" in model_lower:
-        return "openai"
-    elif "llama" in model_lower or "mixtral" in model_lower or "groq" in model_lower:
-        return "groq"
-    return "gemini"
+from Utils.helpers import guess_provider
 
 def check_safety(user_text: str, provider: str, api_key: str | None) -> bool:
     """
@@ -31,13 +17,13 @@ def check_safety(user_text: str, provider: str, api_key: str | None) -> bool:
             safety_llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash-lite", google_api_key=api_key, temperature=0.0)
         elif provider == "mistral":
             from langchain_mistralai import ChatMistralAI
-            safety_llm = ChatMistralAI(model_name="mistral-small-latest", mistral_api_key=api_key, temperature=0.0)
+            safety_llm = ChatMistralAI(model_name="mistral-small-latest", api_key=api_key, temperature=0.0)
         elif provider == "openai":
             from langchain_openai import ChatOpenAI
             safety_llm = ChatOpenAI(model="gpt-5.4-nano", api_key=api_key, temperature=0.0)
         elif provider == "groq":
             from langchain_groq import ChatGroq
-            safety_llm = ChatGroq(model="llama-3.1-8b-instant", groq_api_key=api_key, temperature=0.0)
+            safety_llm = ChatGroq(model="llama-3.1-8b-instant", api_key=api_key, temperature=0.0)
         else:
             return True
 

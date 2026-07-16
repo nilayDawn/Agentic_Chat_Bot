@@ -59,3 +59,19 @@ def extract_text_from_chunk(chunk) -> str:
         return "".join(text_parts)
 
     return ""
+
+
+def guess_provider(model_name: str) -> str:
+    """
+    Determine the model provider based on the model name.
+    """
+    model_lower = model_name.lower()
+    if "gemini" in model_lower:
+        return "gemini"
+    elif "mistral" in model_lower:
+        return "mistral"
+    elif "gpt-" in model_lower or "o1-" in model_lower or "o3-" in model_lower or "openai" in model_lower:
+        return "openai"
+    elif "llama" in model_lower or "mixtral" in model_lower or "groq" in model_lower:
+        return "groq"
+    else: return  "gemini"

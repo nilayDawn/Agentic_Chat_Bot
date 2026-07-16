@@ -85,8 +85,10 @@ def get_retriever(query: str, k: int = 4, thread_id: str | None = None):
     return retriever
 
 
+from langchain_core.runnables import RunnableConfig
+
 @tool
-def rag_tool(query: str) -> str:
+def rag_tool(query: str, config: RunnableConfig) -> str:
     """
     A tool that uses a retriever to fetch relevant information based on the query. Use this tool to answer questions based on the ingested documents. The tool will return a string response containing the relevant information.
 
@@ -97,7 +99,11 @@ def rag_tool(query: str) -> str:
         str: A string response containing the relevant information based on the query.
     """
     try:
-        thread_id = _memory_state.CURRENT_THREAD_ID
+        thread_id = None
+        if config:
+            thread_id = config.get("configurable", {}).get("thread_id")
+        if not thread_id:
+            thread_id = _memory_state.CURRENT_THREAD_ID
         retriever = get_retriever(query, thread_id=thread_id)
         docs = retriever.invoke(query)
     except FileNotFoundError:

@@ -1,8 +1,8 @@
 import os
-import sqlite3
 from langgraph.graph import StateGraph, START, MessagesState
 from langgraph.prebuilt import ToolNode, tools_condition
-from langgraph.checkpoint.sqlite import SqliteSaver
+from psycopg_pool import ConnectionPool
+from langgraph.checkpoint.postgres import PostgresSaver
 from pathlib import Path
 from langchain_core.runnables import RunnableConfig
 
@@ -19,9 +19,22 @@ from Tools.memory_toos import remember_this, recall_memory
 from prompts.prompt import SYSTEM_PROMPT
 
 #import guardrails
-from Agent.guardrails import guardrails_node, guardrails_condition, guess_provider
+from Agent.guardrails import guardrails_node, guardrails_condition
+from Utils.helpers import guess_provider
 
-Path('Data').mkdir(parents=True, exist_ok=True)
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable is not set")
+
+# Initialize PostgreSQL connection pool for LangGraph checkpoint saver
+pool = ConnectionPool(
+    conninfo=DATABASE_URL,
+    max_size=10,
+    min_size=1,
+    kwargs={"autocommit": True, "prepare_threshold": None}
+)
+checkpointer = PostgresSaver(pool)
+checkpointer.setup()
 
 DEFAULT_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
@@ -104,16 +117,28 @@ def build_agent(model_name: str | None = None):
 
             # Re-wrap into the same message type with normalized string content
             # (preserve any additional kwargs safely)
-            if m.__class__.__name__ == "SystemMessage":
+            class_name = m.__class__.__name__
+            if class_name == "SystemMessage":
                 from langchain_core.messages import SystemMessage
                 normalized_messages.append(SystemMessage(content=content))
-            elif m.__class__.__name__ == "HumanMessage":
+            elif class_name == "HumanMessage":
                 from langchain_core.messages import HumanMessage
                 normalized_messages.append(HumanMessage(content=content))
+            elif class_name == "ToolMessage":
+                from langchain_core.messages import ToolMessage
+                normalized_messages.append(ToolMessage(
+                    content=content,
+                    tool_call_id=getattr(m, "tool_call_id", ""),
+                    name=getattr(m, "name", None)
+                ))
             else:
                 # AIMessage / other message types
                 from langchain_core.messages import AIMessage
-                normalized_messages.append(AIMessage(content=content, additional_kwargs=getattr(m, "additional_kwargs", {}) or {}))
+                normalized_messages.append(AIMessage(
+                    content=content,
+                    tool_calls=getattr(m, "tool_calls", None),
+                    additional_kwargs=getattr(m, "additional_kwargs", {}) or {}
+                ))
 
         response = llm_with_tools.invoke(normalized_messages)
 
@@ -134,9 +159,6 @@ def build_agent(model_name: str | None = None):
     workflow.add_conditional_edges("guardrails", guardrails_condition)
     workflow.add_conditional_edges("chatbot", tools_condition)
     workflow.add_edge("tools", "chatbot")
-
-    conn = sqlite3.connect('Data/checkpoints.sqlite', check_same_thread=False)
-    checkpointer = SqliteSaver(conn)
 
     return workflow.compile(checkpointer = checkpointer)
         

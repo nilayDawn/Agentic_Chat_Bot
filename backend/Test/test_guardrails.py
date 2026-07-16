@@ -35,7 +35,7 @@ def main():
     init_db()
     
     # We use the default gemini model for validation
-    agent = get_agent("mistall-small-latest")
+    agent = get_agent("mistral-small-latest")
     
     config = {
         "configurable": {
