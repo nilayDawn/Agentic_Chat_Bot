@@ -51,6 +51,19 @@ class LongTermMemory(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class UserDocument(Base):
+    __tablename__ = "user_documents"
+
+    id = Column(Integer, primary_key=True, index=True)
+    file_id = Column(String, index=True, unique=True)
+    thread_id = Column(String, index=True)
+    user_id = Column(String, index=True)
+    filename = Column(String)
+    status = Column(String)  # "processing", "ready", "failed"
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 
@@ -229,5 +242,50 @@ def search_memory(thread_id: str, query: str):
 
         return "\n".join([f"- {m.memory}" for m in memories])
 
+    finally:
+        db.close()
+
+
+def create_document_tracker(file_id: str, thread_id: str, user_id: str, filename: str):
+    db = SessionLocal()
+    try:
+        doc = UserDocument(
+            file_id=file_id,
+            thread_id=thread_id,
+            user_id=user_id,
+            filename=filename,
+            status="processing",
+            created_at=datetime.utcnow()
+        )
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+        return doc
+    finally:
+        db.close()
+
+
+def update_document_status(file_id: str, status: str, error_message: str | None = None):
+    db = SessionLocal()
+    try:
+        doc = db.query(UserDocument).filter(UserDocument.file_id == file_id).first()
+        if doc:
+            doc.status = status
+            doc.error_message = error_message
+            db.commit()
+        return doc
+    finally:
+        db.close()
+
+
+def list_documents_for_thread(thread_id: str, user_id: str):
+    db = SessionLocal()
+    try:
+        return (
+            db.query(UserDocument)
+            .filter(UserDocument.thread_id == thread_id, UserDocument.user_id == user_id)
+            .order_by(UserDocument.created_at.desc())
+            .all()
+        )
     finally:
         db.close()

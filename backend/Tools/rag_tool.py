@@ -36,38 +36,74 @@ def read_file_text_from_bytes(file_bytes: bytes, filename: str) -> str:
 
     raise ValueError("Unsupported file type. Upload PDF, DOCX, TXT, MD, PY, or CSV.")
 
-def ingest_document(file_bytes: bytes, filename: str, thread_id: str):
-    text = read_file_text_from_bytes(file_bytes, filename)
+def ingest_document(file_bytes: bytes, filename: str, thread_id: str, file_id: str | None = None):
+    try:
+        text = read_file_text_from_bytes(file_bytes, filename)
 
-    if not text.strip():
-        raise ValueError("The document is empty or could not be read.")
-    
-    # Split documents
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        if not text.strip():
+            raise ValueError("The document is empty or could not be read.")
+        
+        # Split documents
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
-    chunks = splitter.split_text(text)
+        chunks = splitter.split_text(text)
 
-    docs:list[Document] = [
-        Document(
-            page_content=chunk,
-            metadata={"source": filename, "thread_id": thread_id}
-        )
-        for chunk in chunks
-    ]
+        docs:list[Document] = [
+            Document(
+                page_content=chunk,
+                metadata={"source": filename, "thread_id": thread_id}
+            )
+            for chunk in chunks
+        ]
 
-    db_path = 'database/chroma_db'
-    db = Chroma(
-        persist_directory=db_path,
-        embedding_function=embeddings,
-        collection_name="rag_documents"
-    )
-    db.add_documents(docs)
+        pinecone_api_key = os.getenv("PINECONE_API_KEY")
+        if pinecone_api_key:
+            from langchain_pinecone import PineconeVectorStore
+            index_name = os.getenv("PINECONE_INDEX_NAME", "agentic-bot")
+            PineconeVectorStore.from_documents(
+                docs,
+                embeddings,
+                index_name=index_name,
+                pinecone_api_key=pinecone_api_key
+            )
+        else:
+            db_path = 'database/chroma_db'
+            db = Chroma(
+                persist_directory=db_path,
+                embedding_function=embeddings,
+                collection_name="rag_documents"
+            )
+            db.add_documents(docs)
+
+        # Update status to ready
+        if file_id:
+            from Memory.database import update_document_status
+            update_document_status(file_id, "ready")
+
+    except Exception as e:
+        # Update status to failed
+        if file_id:
+            from Memory.database import update_document_status
+            update_document_status(file_id, "failed", error_message=str(e))
+        raise e
 
 def retrieve_hybrid_documents(query: str, thread_id: str, k: int = 4) -> list:
     """
     Perform a hybrid search combining dense semantic similarity and sparse keyword search (BM25)
     over documents matching the given thread_id.
     """
+    pinecone_api_key = os.getenv("PINECONE_API_KEY")
+    if pinecone_api_key:
+        from langchain_pinecone import PineconeVectorStore
+        index_name = os.getenv("PINECONE_INDEX_NAME", "agentic-bot")
+        db = PineconeVectorStore(
+            index_name=index_name,
+            embedding=embeddings,
+            pinecone_api_key=pinecone_api_key
+        )
+        return db.similarity_search(query, k=k, filter={"thread_id": thread_id})
+
+    # Chroma Local flow
     db_path = 'database/chroma_db'
     if not os.path.exists(db_path):
         raise FileNotFoundError("Chroma database not found.")

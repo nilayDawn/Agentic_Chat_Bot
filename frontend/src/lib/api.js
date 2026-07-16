@@ -76,6 +76,19 @@ export async function uploadDocument(file, threadId) {
   return data;
 }
 
+/**
+ * Fetch status of all uploaded documents for a specific thread.
+ * @param {string} threadId
+ * @returns {Promise<Array>} List of document objects { file_id, filename, status, error_message, created_at }
+ */
+export async function fetchThreadDocuments(threadId) {
+  const headers = await getAuthHeaders();
+  const res = await fetch(`${BASE_URL}/conversations/${threadId}/documents`, { headers });
+  if (!res.ok) throw new Error("Failed to fetch documents status");
+  const data = await res.json();
+  return data.documents;
+}
+
 // ─── SSE streaming ────────────────────────────────────────────────────────────
 
 /**

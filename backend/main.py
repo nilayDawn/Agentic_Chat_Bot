@@ -7,20 +7,36 @@ import uvicorn
 from fastapi import FastAPI, Request, UploadFile, File, Form, Depends, BackgroundTasks
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 from langchain_core.messages import AIMessage, HumanMessage,ToolMessage,AIMessageChunk
 
 from Agent.chatbot import get_agent
-from Memory.database import init_db,save_chat_message,get_chat_history,create_or_update_conversation,list_conversations,delete_conversation
+from Memory.database import (
+    init_db,
+    save_chat_message,
+    get_chat_history,
+    create_or_update_conversation,
+    list_conversations,
+    delete_conversation,
+    create_document_tracker,
+    update_document_status,
+    list_documents_for_thread
+)
 from Tools.rag_tool import ingest_document
 from Tools.memory_toos import set_current_thread_id
 from Utils.auth import get_current_user
 
+limiter = Limiter(key_func=get_remote_address)
 app = FastAPI(
     title="Agentic Chat Bot Backend",
     description="This is the backend for the Agentic Chat Bot, which provides an API for interacting with the chatbot, managing conversations, and handling memory.",
     version="0.0.1",
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
@@ -91,7 +107,9 @@ async def delete_conversation_endpoint(thread_id: str, current_user: dict = Depe
         return JSONResponse({"success": False, "message": str(e)}, status_code=500)
 
 @app.post("/upload")
+@limiter.limit("10/minute")
 async def upload_document(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     thread_id: str = Form(...),
@@ -116,29 +134,56 @@ async def upload_document(
         # Read file bytes in memory
         file_bytes = await file.read()
 
-        create_or_update_conversation(thread_id, user_id, "Uploaded document")
+        create_or_update_conversation(thread_id, user_id, f"Uploaded document: {filename}")
 
-        # Run ingest_document asynchronously entirely in-memory
-        background_tasks.add_task(ingest_document, file_bytes, filename, thread_id)
+        # Create tracking record
+        file_id = str(uuid.uuid4())
+        create_document_tracker(file_id, thread_id, user_id, filename)
+
+        # Run ingest_document asynchronously entirely in-memory with file_id tracking
+        background_tasks.add_task(ingest_document, file_bytes, filename, thread_id, file_id)
 
         return JSONResponse({
             "success": True,
-            "message": f"Uploaded {filename} successfully. Processing started in the background."
+            "message": f"Uploaded {filename} successfully. Processing started in the background.",
+            "file_id": file_id
         })
-
     except Exception as e:
         return JSONResponse(
             {
                 "success": False,
                 "message": str(e)
-         },
+            },
             status_code=500
         )
-    
+
+
+@app.get("/conversations/{thread_id}/documents")
+@limiter.limit("60/minute")
+async def get_thread_documents(request: Request, thread_id: str, current_user: dict = Depends(get_current_user)):
+    user_id = current_user["id"]
+    try:
+        docs = list_documents_for_thread(thread_id, user_id)
+        return {
+            "documents": [
+                {
+                    "file_id": doc.file_id,
+                    "filename": doc.filename,
+                    "status": doc.status,
+                    "error_message": doc.error_message,
+                    "created_at": doc.created_at.isoformat()
+                }
+                for doc in docs
+            ]
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
 
 from Utils.helpers import sse_data, should_stream_chunk, extract_text_from_chunk
 
 @app.post("/chat/stream")
+@limiter.limit("30/minute")
 async def chat_stream(request: Request, current_user: dict = Depends(get_current_user)):
     user_id = current_user["id"]
     try:

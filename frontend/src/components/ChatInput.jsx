@@ -1,7 +1,7 @@
 import { useRef, useCallback, useState } from "react";
 import { Send, Square, Paperclip, ChevronDown, Key } from "lucide-react";
 import { v4 as uuidv4 } from "uuid";
-import { uploadDocument } from "../lib/api";
+import { uploadDocument, fetchThreadDocuments } from "../lib/api";
 import { validateFile } from "../utils/fileUtils";
 import { MODELS } from "../constants/models";
 import FileCard from "./FileCard";
@@ -88,9 +88,42 @@ export default function ChatInput({
       }
 
       try {
-        await uploadDocument(file, threadId);
-        setUploadState("success");
-        setUploadError("");
+        const response = await uploadDocument(file, threadId);
+        const fileId = response.file_id;
+
+        if (fileId) {
+          let attempts = 0;
+          const maxAttempts = 30; // 45 seconds total (30 * 1.5s)
+          const pollInterval = setInterval(async () => {
+            attempts++;
+            try {
+              const docs = await fetchThreadDocuments(threadId);
+              const doc = docs.find((d) => d.file_id === fileId);
+              if (doc) {
+                if (doc.status === "ready") {
+                  clearInterval(pollInterval);
+                  setUploadState("success");
+                  setUploadError("");
+                } else if (doc.status === "failed") {
+                  clearInterval(pollInterval);
+                  setUploadState("error");
+                  setUploadError(doc.error_message || "Ingestion failed");
+                }
+              }
+            } catch (err) {
+              // Ignore occasional poll fetch errors
+            }
+
+            if (attempts >= maxAttempts) {
+              clearInterval(pollInterval);
+              setUploadState("error");
+              setUploadError("Ingestion status check timed out.");
+            }
+          }, 1500);
+        } else {
+          setUploadState("success");
+          setUploadError("");
+        }
       } catch (err) {
         setUploadState("error");
         setUploadError(err.message || "Ingestion failed");
